@@ -1,3 +1,36 @@
 plugins {
     id 'com.android.application' version '8.7.3' apply false
+    id 'maven-publish'
+}
+
+group = System.getenv('GROUP') ?: 'com.github.myilanci028-source'
+version = System.getenv('VERSION') ?: '1.0-test'
+
+def apkArtifactId = System.getenv('ARTIFACT') ?: 'depo1'
+def debugApk = layout.projectDirectory.file('app/build/outputs/apk/debug/app-debug.apk')
+
+tasks.register('buildDebugApk') {
+    dependsOn(':app:assembleDebug')
+}
+
+publishing {
+    publications {
+        barcodeKeyboardApk(MavenPublication) {
+            groupId = project.group.toString()
+            artifactId = apkArtifactId
+            version = project.version.toString()
+            artifact(debugApk.asFile) {
+                extension = 'apk'
+                builtBy(tasks.named('buildDebugApk'))
+            }
+            pom {
+                name = 'Yilancioglu Barcode Keyboard APK'
+                description = 'Offline Android barcode scanner input method test APK'
+            }
+        }
+    }
+}
+
+tasks.withType(PublishToMavenLocal).configureEach {
+    dependsOn(tasks.named('buildDebugApk'))
 }
