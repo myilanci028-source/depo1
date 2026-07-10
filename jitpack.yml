@@ -1,0 +1,4 @@
+jdk:
+  - openjdk17
+install:
+  - gradle --no-daemon --stacktrace clean :app:assembleDebug publishToMavenLocal
