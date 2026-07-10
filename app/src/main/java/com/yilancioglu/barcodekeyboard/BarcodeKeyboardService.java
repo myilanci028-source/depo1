@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Build;
@@ -46,16 +47,32 @@ import com.google.mlkit.vision.barcode.BarcodeScanning;
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BarcodeKeyboardService extends InputMethodService implements LifecycleOwner {
-    public static final String PREFS_NAME = "scanner_settings";
-    public static final String PREF_APPEND_ENTER = "append_enter";
-    public static final String PREF_PAUSE_AFTER_SCAN = "pause_after_scan";
+    public static final String PREFS_NAME = "scanner_settings_v2";
+    public static final String PREF_SUFFIX_MODE = "suffix_mode";
+    public static final String PREF_SOUND = "sound_enabled";
+    public static final String PREF_VIBRATION = "vibration_enabled";
+    public static final String PREF_DUPLICATE_GUARD = "duplicate_guard";
+    public static final String PREF_CONTINUOUS_MODE = "continuous_mode";
+    public static final String PREF_HISTORY = "scan_history";
+
+    public static final String SUFFIX_ENTER = "ENTER";
+    public static final String SUFFIX_TAB = "TAB";
+    public static final String SUFFIX_SPACE = "SPACE";
+    public static final String SUFFIX_NONE = "NONE";
+
+    private static final int NAVY = Color.rgb(7, 18, 31);
+    private static final int PANEL = Color.rgb(18, 42, 70);
+    private static final int GOLD = Color.rgb(218, 169, 92);
 
     private final LifecycleRegistry lifecycleRegistry = new LifecycleRegistry(this);
     private final AtomicBoolean processing = new AtomicBoolean(false);
@@ -66,11 +83,13 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
     private BarcodeScanner scanner;
     private TextView statusView;
     private Button torchButton;
+    private Button scanButton;
     private boolean scanningEnabled = true;
     private boolean torchEnabled = false;
     private float zoomRatio = 1f;
     private String lastValue = "";
     private long lastValueAt = 0L;
+    private int sessionCount = 0;
     private SharedPreferences preferences;
     private ToneGenerator toneGenerator;
 
@@ -103,8 +122,8 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
     public View onCreateInputView() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(9, 21, 38));
-        root.setPadding(dp(8), dp(7), dp(8), dp(7));
+        root.setBackgroundColor(NAVY);
+        root.setPadding(dp(7), dp(7), dp(7), dp(7));
 
         FrameLayout cameraFrame = new FrameLayout(this);
         previewView = new PreviewView(this);
@@ -118,14 +137,14 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
         int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        int cameraHeight = Math.max(dp(180), Math.min(dp(310), Math.round(screenHeight * 0.29f)));
+        int cameraHeight = Math.max(dp(175), Math.min(dp(300), Math.round(screenHeight * 0.27f)));
         root.addView(cameraFrame, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, cameraHeight));
 
         statusView = new TextView(this);
-        statusView.setText("Barkodu turuncu çerçevenin ortasına getir");
+        statusView.setText("V2 hazır — barkodu turuncu çerçeveye getir");
         statusView.setTextColor(Color.WHITE);
-        statusView.setTextSize(14);
+        statusView.setTextSize(13);
         statusView.setSingleLine(true);
         statusView.setGravity(Gravity.CENTER);
         statusView.setPadding(dp(6), dp(7), dp(6), dp(7));
@@ -133,46 +152,57 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        LinearLayout controls = new LinearLayout(this);
-        controls.setOrientation(LinearLayout.HORIZONTAL);
-        controls.setGravity(Gravity.CENTER);
-
-        Button scanButton = controlButton("DURDUR");
+        LinearLayout firstRow = controlRow();
+        scanButton = controlButton("DURDUR");
         scanButton.setOnClickListener(v -> {
             scanningEnabled = !scanningEnabled;
             scanButton.setText(scanningEnabled ? "DURDUR" : "TARA");
             setStatus(scanningEnabled ? "Tarama açık" : "Tarama durduruldu", false);
         });
-        controls.addView(scanButton, weighted());
+        firstRow.addView(scanButton, weighted());
 
         torchButton = controlButton("FENER");
         torchButton.setOnClickListener(v -> toggleTorch());
-        controls.addView(torchButton, weighted());
+        firstRow.addView(torchButton, weighted());
 
-        Button minus = controlButton("−");
-        minus.setTextSize(24);
-        minus.setOnClickListener(v -> setZoom(zoomRatio - 0.35f));
-        controls.addView(minus, weighted());
+        Button zoom1 = controlButton("1×");
+        zoom1.setOnClickListener(v -> setZoom(1f));
+        firstRow.addView(zoom1, weighted());
 
-        Button plus = controlButton("+");
-        plus.setTextSize(24);
-        plus.setOnClickListener(v -> setZoom(zoomRatio + 0.35f));
-        controls.addView(plus, weighted());
+        Button zoom2 = controlButton("2×");
+        zoom2.setOnClickListener(v -> setZoom(2f));
+        firstRow.addView(zoom2, weighted());
 
+        Button zoom3 = controlButton("3×");
+        zoom3.setOnClickListener(v -> setZoom(3f));
+        firstRow.addView(zoom3, weighted());
+        root.addView(firstRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));
+
+        LinearLayout secondRow = controlRow();
         Button backspace = controlButton("SİL");
         backspace.setOnClickListener(v -> deleteOne());
-        controls.addView(backspace, weighted());
+        secondRow.addView(backspace, weighted());
+
+        Button tab = controlButton("TAB");
+        tab.setOnClickListener(v -> sendKey(KeyEvent.KEYCODE_TAB));
+        secondRow.addView(tab, weighted());
 
         Button enter = controlButton("ENTER");
-        enter.setOnClickListener(v -> sendEnter());
-        controls.addView(enter, weighted());
+        enter.setOnClickListener(v -> sendKey(KeyEvent.KEYCODE_ENTER));
+        secondRow.addView(enter, weighted());
+
+        Button settings = controlButton("AYAR");
+        settings.setOnClickListener(v -> openSetup());
+        secondRow.addView(settings, weighted());
 
         Button next = controlButton("KLAVYE");
         next.setOnClickListener(v -> switchToNextInputMethod(false));
-        controls.addView(next, weighted());
-
-        root.addView(controls, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(52)));
+        secondRow.addView(next, weighted());
+        LinearLayout.LayoutParams secondRowParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48));
+        secondRowParams.topMargin = dp(4);
+        root.addView(secondRow, secondRowParams);
 
         ScaleGestureDetector scaleDetector = new ScaleGestureDetector(this,
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -192,7 +222,7 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
         });
 
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            setStatus("Kamera izni gerekli — uygulamayı aç", true);
+            setStatus("Kamera izni gerekli — AYAR düğmesine bas", true);
             cameraFrame.setOnClickListener(v -> openSetup());
         }
         return root;
@@ -203,6 +233,8 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
         super.onStartInputView(info, restarting);
         lifecycleRegistry.setCurrentState(Lifecycle.State.RESUMED);
         scanningEnabled = true;
+        sessionCount = 0;
+        if (scanButton != null) scanButton.setText("DURDUR");
         if (previewView != null) previewView.post(this::startCamera);
     }
 
@@ -215,7 +247,7 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
 
     private void startCamera() {
         if (previewView == null || checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            setStatus("Kamera izni gerekli — uygulamayı aç", true);
+            setStatus("Kamera izni gerekli — AYAR düğmesine bas", true);
             return;
         }
         ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
@@ -240,10 +272,13 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
                         CameraSelector.DEFAULT_BACK_CAMERA,
                         preview,
                         analysis);
-                zoomRatio = camera.getCameraInfo().getZoomState().getValue() != null
-                        ? camera.getCameraInfo().getZoomState().getValue().getZoomRatio() : 1f;
+                if (camera.getCameraInfo().getZoomState().getValue() != null) {
+                    zoomRatio = camera.getCameraInfo().getZoomState().getValue().getZoomRatio();
+                } else {
+                    zoomRatio = 1f;
+                }
                 torchButton.setEnabled(camera.getCameraInfo().hasFlashUnit());
-                setStatus("Hazır — barkodu ortaya getir", false);
+                setStatus("V2 hazır — barkodu ortaya getir", false);
             } catch (Exception e) {
                 setStatus("Kamera açılamadı: " + safeMessage(e), true);
             }
@@ -306,7 +341,8 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
     private void acceptBarcode(Barcode barcode) {
         String value = barcode.getRawValue();
         long now = SystemClock.elapsedRealtime();
-        if (value.equals(lastValue) && now - lastValueAt < 1800) return;
+        boolean duplicateGuard = preferences.getBoolean(PREF_DUPLICATE_GUARD, true);
+        if (duplicateGuard && value.equals(lastValue) && now - lastValueAt < 1800) return;
         lastValue = value;
         lastValueAt = now;
 
@@ -316,16 +352,53 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
             return;
         }
         connection.commitText(value, 1);
-        if (preferences.getBoolean(PREF_APPEND_ENTER, true)) sendEnter();
+        applySuffix(connection);
 
-        if (toneGenerator != null) toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
-        vibrate();
-        setStatus(formatName(barcode.getFormat()) + " • " + shorten(value), false);
-
-        if (preferences.getBoolean(PREF_PAUSE_AFTER_SCAN, true)) {
-            scanningEnabled = false;
-            if (statusView != null) statusView.postDelayed(() -> scanningEnabled = true, 650);
+        if (preferences.getBoolean(PREF_SOUND, true) && toneGenerator != null) {
+            toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
         }
+        if (preferences.getBoolean(PREF_VIBRATION, true)) vibrate();
+
+        sessionCount++;
+        String format = formatName(barcode.getFormat());
+        addHistory(format, value);
+        setStatus("#" + sessionCount + "  " + format + " • " + shorten(value), false);
+
+        boolean continuous = preferences.getBoolean(PREF_CONTINUOUS_MODE, false);
+        if (!continuous) {
+            scanningEnabled = false;
+            if (statusView != null) {
+                statusView.postDelayed(() -> scanningEnabled = true, 650);
+            }
+        }
+    }
+
+    private void applySuffix(InputConnection connection) {
+        String suffix = preferences.getString(PREF_SUFFIX_MODE, SUFFIX_ENTER);
+        if (SUFFIX_TAB.equals(suffix)) {
+            sendKey(connection, KeyEvent.KEYCODE_TAB);
+        } else if (SUFFIX_SPACE.equals(suffix)) {
+            connection.commitText(" ", 1);
+        } else if (SUFFIX_ENTER.equals(suffix)) {
+            sendKey(connection, KeyEvent.KEYCODE_ENTER);
+        }
+    }
+
+    private void addHistory(String format, String value) {
+        String cleanValue = value.replace('\n', ' ').replace('\r', ' ').trim();
+        if (cleanValue.length() > 70) cleanValue = cleanValue.substring(0, 67) + "…";
+        String time = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
+        String entry = time + "  •  " + format + "  •  " + cleanValue;
+        String oldHistory = preferences.getString(PREF_HISTORY, "");
+        StringBuilder updated = new StringBuilder(entry);
+        if (oldHistory != null && !oldHistory.trim().isEmpty()) {
+            String[] lines = oldHistory.split("\\n");
+            int limit = Math.min(lines.length, 19);
+            for (int i = 0; i < limit; i++) {
+                updated.append('\n').append(lines[i]);
+            }
+        }
+        preferences.edit().putString(PREF_HISTORY, updated.toString()).apply();
     }
 
     private void toggleTorch() {
@@ -341,7 +414,7 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
         float max = camera.getCameraInfo().getZoomState().getValue().getMaxZoomRatio();
         zoomRatio = Math.max(min, Math.min(max, desired));
         camera.getCameraControl().setZoomRatio(zoomRatio);
-        setStatus(String.format(java.util.Locale.US, "Yakınlaştırma %.1fx", zoomRatio), false);
+        setStatus(String.format(Locale.US, "Yakınlaştırma %.1f×", zoomRatio), false);
     }
 
     private void focusAt(float x, float y) {
@@ -358,22 +431,25 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
         if (cameraProvider != null) cameraProvider.unbindAll();
         camera = null;
         torchEnabled = false;
+        if (torchButton != null) torchButton.setText("FENER");
     }
 
     private void deleteOne() {
-        InputConnection c = getCurrentInputConnection();
-        if (c == null) return;
-        if (!c.deleteSurroundingText(1, 0)) {
-            c.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
-            c.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL));
+        InputConnection connection = getCurrentInputConnection();
+        if (connection == null) return;
+        if (!connection.deleteSurroundingText(1, 0)) {
+            sendKey(connection, KeyEvent.KEYCODE_DEL);
         }
     }
 
-    private void sendEnter() {
-        InputConnection c = getCurrentInputConnection();
-        if (c == null) return;
-        c.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER));
-        c.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER));
+    private void sendKey(int keyCode) {
+        InputConnection connection = getCurrentInputConnection();
+        if (connection != null) sendKey(connection, keyCode);
+    }
+
+    private void sendKey(InputConnection connection, int keyCode) {
+        connection.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
+        connection.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode));
     }
 
     private void vibrate() {
@@ -400,6 +476,13 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
         });
     }
 
+    private LinearLayout controlRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        return row;
+    }
+
     private Button controlButton(String text) {
         Button button = new Button(this);
         button.setText(text);
@@ -407,12 +490,17 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
         button.setTextColor(Color.WHITE);
         button.setAllCaps(false);
         button.setPadding(dp(2), 0, dp(2), 0);
-        button.setBackgroundColor(Color.rgb(24, 53, 91));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(PANEL);
+        background.setCornerRadius(dp(9));
+        background.setStroke(dp(1), GOLD);
+        button.setBackground(background);
         return button;
     }
 
     private LinearLayout.LayoutParams weighted() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         p.setMargins(dp(2), 0, dp(2), 0);
         return p;
     }
@@ -423,8 +511,10 @@ public class BarcodeKeyboardService extends InputMethodService implements Lifecy
     }
 
     private String safeMessage(Exception e) {
-        String m = e.getMessage();
-        return m == null || m.trim().isEmpty() ? e.getClass().getSimpleName() : m;
+        String message = e.getMessage();
+        return message == null || message.trim().isEmpty()
+                ? e.getClass().getSimpleName()
+                : message;
     }
 
     private String formatName(int format) {
