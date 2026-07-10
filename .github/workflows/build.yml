@@ -2,7 +2,7 @@ name: Build test APK
 
 on:
   push:
-    branches: [barcode-keyboard-v1]
+    branches: [main, barcode-keyboard-v1]
     paths-ignore:
       - 'dist/**'
   pull_request:
@@ -27,22 +27,41 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
-        run: gradle --no-daemon --stacktrace assembleDebug
-      - name: Publish APK into branch
+      - name: Build debug APK and save log
+        id: apkbuild
+        shell: bash
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/YILANCIOGLU_BARKOD_KLAVYE_TEST_v1.apk
+          set +e
+          gradle --no-daemon --stacktrace assembleDebug > dist/build.log 2>&1
+          STATUS=$?
+          set -e
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" -eq 0 ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk dist/YILANCIOGLU_BARKOD_KLAVYE_TEST_v1.apk
+            echo "BUILD SUCCESS" >> dist/build.log
+          else
+            rm -f dist/YILANCIOGLU_BARKOD_KLAVYE_TEST_v1.apk
+            echo "BUILD FAILED ($STATUS)" >> dist/build.log
+          fi
+      - name: Publish APK or build log into branch
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist/YILANCIOGLU_BARKOD_KLAVYE_TEST_v1.apk
+          git add dist
           if ! git diff --cached --quiet; then
-            git commit -m "Publish test APK [skip ci]"
-            git push
+            git commit -m "Publish APK build result [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
       - uses: actions/upload-artifact@v4
+        if: steps.apkbuild.outputs.status == '0'
         with:
           name: YILANCIOGLU_BARKOD_KLAVYE_TEST_v1
           path: dist/YILANCIOGLU_BARKOD_KLAVYE_TEST_v1.apk
           if-no-files-found: error
           retention-days: 30
+      - name: Fail when APK build failed
+        if: steps.apkbuild.outputs.status != '0'
+        run: exit 1
