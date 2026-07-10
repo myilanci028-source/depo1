@@ -1,8 +1,8 @@
-name: Build test APK
+name: Build V2 test APK
 
 on:
   push:
-    branches: [main, barcode-keyboard-v1]
+    branches: [barcode-keyboard-v2]
     paths-ignore:
       - 'dist/**'
   pull_request:
@@ -27,24 +27,24 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK and save log
+      - name: Build V2 debug APK and save log
         id: apkbuild
         shell: bash
         run: |
           mkdir -p dist
           set +e
-          gradle --no-daemon --stacktrace assembleDebug > dist/build.log 2>&1
+          gradle --no-daemon --stacktrace assembleDebug > dist/build-v2.log 2>&1
           STATUS=$?
           set -e
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
           if [ "$STATUS" -eq 0 ]; then
-            cp app/build/outputs/apk/debug/app-debug.apk dist/YILANCIOGLU_BARKOD_KLAVYE_TEST_v1.apk
-            echo "BUILD SUCCESS" >> dist/build.log
+            cp app/build/outputs/apk/debug/app-debug.apk dist/YILANCIOGLU_BARKOD_KLAVYE_V2_TEST.apk
+            echo "V2 BUILD SUCCESS" >> dist/build-v2.log
           else
-            rm -f dist/YILANCIOGLU_BARKOD_KLAVYE_TEST_v1.apk
-            echo "BUILD FAILED ($STATUS)" >> dist/build.log
+            rm -f dist/YILANCIOGLU_BARKOD_KLAVYE_V2_TEST.apk
+            echo "V2 BUILD FAILED ($STATUS)" >> dist/build-v2.log
           fi
-      - name: Publish APK or build log into branch
+      - name: Publish V2 APK or compiler log into branch
         if: github.event_name == 'push'
         shell: bash
         run: |
@@ -52,16 +52,16 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dist
           if ! git diff --cached --quiet; then
-            git commit -m "Publish APK build result [skip ci]"
+            git commit -m "Publish V2 APK build result [skip ci]"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
       - uses: actions/upload-artifact@v4
         if: steps.apkbuild.outputs.status == '0'
         with:
-          name: YILANCIOGLU_BARKOD_KLAVYE_TEST_v1
-          path: dist/YILANCIOGLU_BARKOD_KLAVYE_TEST_v1.apk
+          name: YILANCIOGLU_BARKOD_KLAVYE_V2_TEST
+          path: dist/YILANCIOGLU_BARKOD_KLAVYE_V2_TEST.apk
           if-no-files-found: error
           retention-days: 30
-      - name: Fail when APK build failed
+      - name: Fail when V2 APK build failed
         if: steps.apkbuild.outputs.status != '0'
         run: exit 1
