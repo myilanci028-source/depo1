@@ -2,7 +2,7 @@ name: Build iOS Barcode Keyboard
 
 on:
   pull_request:
-    branches: [main]
+    branches: [ios-keyboard-build-base]
     paths:
       - 'ios-barcode-keyboard/**'
       - '.github/workflows/build-ios-keyboard.yml'
