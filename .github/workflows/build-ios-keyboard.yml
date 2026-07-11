@@ -1,0 +1,70 @@
+name: Build iOS Barcode Keyboard
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ios-barcode-keyboard/**'
+      - '.github/workflows/build-ios-keyboard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-simulator:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: ios-barcode-keyboard
+        run: xcodegen generate
+      - name: Build unsigned iOS Simulator app
+        id: iosbuild
+        shell: bash
+        run: |
+          mkdir -p dist-ios
+          set +e
+          xcodebuild \
+            -project ios-barcode-keyboard/YilanciogluBarcodeKeyboardIOS.xcodeproj \
+            -scheme YilanciogluBarcodeKeyboard \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath ios-barcode-keyboard/build \
+            clean build > dist-ios/build-ios.log 2>&1
+          STATUS=$?
+          set -e
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" -eq 0 ]; then
+            ditto -c -k --sequesterRsrc --keepParent \
+              ios-barcode-keyboard/build/Build/Products/Debug-iphonesimulator/YilanciogluBarcodeKeyboard.app \
+              dist-ios/YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1.zip
+            echo "IOS SIMULATOR BUILD SUCCESS" >> dist-ios/build-ios.log
+          else
+            echo "IOS BUILD FAILED ($STATUS)" >> dist-ios/build-ios.log
+          fi
+      - uses: actions/upload-artifact@v4
+        if: steps.iosbuild.outputs.status == '0'
+        with:
+          name: YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1
+          path: dist-ios/YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1.zip
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: YILANCIOGLU_IOS_BUILD_LOG
+          path: dist-ios/build-ios.log
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Fail when compiler failed
+        if: steps.iosbuild.outputs.status != '0'
+        run: exit 1
