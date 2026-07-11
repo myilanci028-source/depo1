@@ -110,11 +110,18 @@ struct ContentView: View {
             ZStack {
                 navy.ignoresSafeArea()
                 if records.isEmpty {
-                    ContentUnavailableView(
-                        "Henüz barkod yok",
-                        systemImage: "barcode.viewfinder",
-                        description: Text("Tara bölümünden ilk barkodu okut.")
-                    )
+                    VStack(spacing: 12) {
+                        Image(systemName: "barcode.viewfinder")
+                            .font(.system(size: 48, weight: .semibold))
+                            .foregroundStyle(gold)
+                        Text("Henüz barkod yok")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.white)
+                        Text("Tara bölümünden ilk barkodu okut.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(24)
                 } else {
                     List {
                         ForEach(records) { record in
