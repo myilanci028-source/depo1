@@ -1,1 +1,0 @@
-# Yılancıoğlu Barkod Klavye iOS
