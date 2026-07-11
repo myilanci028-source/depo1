@@ -5,6 +5,11 @@ on:
     branches: [ios-barcode-keyboard-v1]
     paths-ignore:
       - 'dist-ios/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ios-barcode-keyboard/**'
+      - '.github/workflows/build-ios-keyboard.yml'
   workflow_dispatch:
 
 permissions:
@@ -59,6 +64,7 @@ jobs:
           fi
 
       - name: Publish simulator build or compiler log
+        if: github.event_name == 'push'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -75,6 +81,14 @@ jobs:
           name: YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1
           path: dist-ios/YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1.zip
           if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: YILANCIOGLU_IOS_BUILD_LOG
+          path: dist-ios/build-ios.log
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Fail when compiler failed
