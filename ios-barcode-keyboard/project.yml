@@ -1,0 +1,60 @@
+name: YilanciogluBarcodeKeyboardIOS
+options:
+  bundleIdPrefix: com.yilancioglu
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+targets:
+  YilanciogluBarcodeKeyboard:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+    info:
+      path: App/Info.plist
+    entitlements:
+      path: App/App.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yilancioglu.barcodekeyboard.ios
+        PRODUCT_NAME: YilanciogluBarcodeKeyboard
+        INFOPLIST_KEY_CFBundleDisplayName: "YILANCIOĞLU Barkod"
+    dependencies:
+      - target: YilanciogluKeyboardExtension
+        embed: true
+
+  YilanciogluKeyboardExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: KeyboardExtension
+      - path: Shared
+    info:
+      path: KeyboardExtension/Info.plist
+    entitlements:
+      path: KeyboardExtension/KeyboardExtension.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yilancioglu.barcodekeyboard.ios.keyboard
+        PRODUCT_NAME: YilanciogluKeyboardExtension
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+schemes:
+  YilanciogluBarcodeKeyboard:
+    build:
+      targets:
+        YilanciogluBarcodeKeyboard: all
+        YilanciogluKeyboardExtension: all
+    run:
+      config: Debug
+    archive:
+      config: Release
