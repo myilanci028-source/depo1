@@ -1,0 +1,82 @@
+name: Build iOS Barcode Keyboard
+
+on:
+  push:
+    branches: [ios-barcode-keyboard-v1]
+    paths-ignore:
+      - 'dist-ios/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-simulator:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios-barcode-keyboard
+        run: xcodegen generate
+
+      - name: Build unsigned iOS Simulator app
+        id: iosbuild
+        shell: bash
+        run: |
+          mkdir -p dist-ios
+          set +e
+          xcodebuild \
+            -project ios-barcode-keyboard/YilanciogluBarcodeKeyboardIOS.xcodeproj \
+            -scheme YilanciogluBarcodeKeyboard \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath ios-barcode-keyboard/build \
+            clean build > dist-ios/build-ios.log 2>&1
+          STATUS=$?
+          set -e
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" -eq 0 ]; then
+            ditto -c -k --sequesterRsrc --keepParent \
+              ios-barcode-keyboard/build/Build/Products/Debug-iphonesimulator/YilanciogluBarcodeKeyboard.app \
+              dist-ios/YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1.zip
+            echo "IOS SIMULATOR BUILD SUCCESS" >> dist-ios/build-ios.log
+          else
+            rm -f dist-ios/YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1.zip
+            echo "IOS BUILD FAILED ($STATUS)" >> dist-ios/build-ios.log
+          fi
+
+      - name: Publish simulator build or compiler log
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist-ios
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish iOS keyboard build result [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: steps.iosbuild.outputs.status == '0'
+        with:
+          name: YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1
+          path: dist-ios/YILANCIOGLU_BARKOD_KLAVYE_IOS_SIMULATOR_V1.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail when compiler failed
+        if: steps.iosbuild.outputs.status != '0'
+        run: exit 1
