@@ -86,5 +86,5 @@ For more details on creating a Gradle build, please refer to https://docs.gradle
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
 
 
-BUILD FAILED in 3s
+BUILD FAILED in 2s
 BUILD FAILED (1)
