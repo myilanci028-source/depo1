@@ -56,7 +56,7 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 try {
                     view.evaluateJavascript(
-                            "(function(){document.querySelectorAll('.ver').forEach(function(e){e.textContent=e.textContent.replace('v2.7','v2.8');});})();",
+                            "(function(){document.querySelectorAll('.ver').forEach(function(e){e.textContent=e.textContent.replace(/v2\\.[0-9]+/g,'v2.9');});})();",
                             null);
                 } catch (Exception ignored) {}
             }
@@ -93,9 +93,9 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void printHtml(String html, String mode) {
-            runOnUiThread(() -> openPrint(prepareHtmlForV28(html, mode), mode));
+            runOnUiThread(() -> openPrint(prepareHtmlForV29(html, mode), mode));
         }
-        @JavascriptInterface public String appVersion() { return "2.8.0"; }
+        @JavascriptInterface public String appVersion() { return "2.9.0"; }
     }
 
     private class TcpClient extends Thread {
@@ -153,52 +153,48 @@ public class MainActivity extends Activity {
         }
     }
 
-    // V2.8: A4 sağ üst bilgi bloğunu düzenler.
-    // Telefon + web adresini firma bloğundan alıp TARTIM RAPORU / Fiş / Tarih altına taşır.
-    private String prepareHtmlForV28(String html, String mode) {
+    // V2.9: A4 sağ üst iletişim bloğu artık ayarlardan bağımsız ve garanti şekilde basılır.
+    // Düzen: TARTIM RAPORU > Fiş > Tarih > Telefon > Web.
+    private String prepareHtmlForV29(String html, String mode) {
         if (html == null) return "";
-        String out = html.replace("MUBEL KANTAR v2.7", "MUBEL KANTAR v2.8");
+
+        String out = html
+                .replace("MUBEL KANTAR v2.7", "MUBEL KANTAR v2.9")
+                .replace("MUBEL KANTAR v2.8", "MUBEL KANTAR v2.9");
+
         if (mode != null && mode.startsWith("70")) return out;
-        if (out.contains("class=\"reportContact\"")) return out;
 
-        final String reportMarker = "<div class=\"title\">TARTIM RAPORU<br><small>";
-        int reportPos = out.indexOf(reportMarker);
-        if (reportPos < 0) return out;
+        final String phone = "0530 962 67 93";
+        final String website = "https://www.yilancioglu.com.tr/";
 
-        int leftClose = out.lastIndexOf("</div></div>", reportPos);
-        if (leftClose < 0) return out;
-        int metaStart = out.lastIndexOf("<div>", leftClose);
-        if (metaStart < 0) return out;
-        int metaContentStart = metaStart + 5;
-        int metaEnd = out.indexOf("</div>", metaContentStart);
-        if (metaEnd < 0 || metaEnd > reportPos) return out;
+        // A4 sol firma bloğunda varsa iletişim satırlarını kaldır; sadece sağ üstte kalsın.
+        out = out.replace("<br>" + phone, "");
+        out = out.replace("<br>" + website, "");
 
-        String meta = out.substring(metaContentStart, metaEnd);
-        String[] parts = meta.split("<br>");
-        if (parts.length < 3) return out;
+        int titlePos = out.indexOf("TARTIM RAPORU");
+        if (titlePos < 0) return out;
 
-        String phone = parts[1].trim();
-        String webAddress = parts[2].trim();
-        StringBuilder leftMeta = new StringBuilder(parts[0]);
-        for (int i = 3; i < parts.length; i++) {
-            if (!parts[i].trim().isEmpty()) leftMeta.append("<br>").append(parts[i]);
-        }
-
-        out = out.substring(0, metaContentStart) + leftMeta + out.substring(metaEnd);
-
-        reportPos = out.indexOf(reportMarker);
-        if (reportPos < 0) return out;
-        int smallEnd = out.indexOf("</small>", reportPos);
+        int smallStart = out.indexOf("<small", titlePos);
+        if (smallStart < 0) return out;
+        int smallOpenEnd = out.indexOf('>', smallStart);
+        if (smallOpenEnd < 0) return out;
+        int smallEnd = out.indexOf("</small>", smallOpenEnd);
         if (smallEnd < 0) return out;
 
-        String contact = "<br><span class=\"reportContact\" style=\"display:inline-block;margin-top:3px;font-size:9px;font-weight:600;line-height:1.3;white-space:nowrap\">"
-                + phone + "<br>" + webAddress + "</span>";
-        out = out.substring(0, smallEnd) + contact + out.substring(smallEnd);
-        return out;
+        String currentRightBlock = out.substring(smallOpenEnd + 1, smallEnd);
+        if (currentRightBlock.contains(phone) || currentRightBlock.contains("yilancioglu.com.tr")) {
+            return out;
+        }
+
+        String contact = "<br><span class=\"reportContactV29\" "
+                + "style=\"display:inline-block;margin-top:5px;font-size:9px;font-weight:600;"
+                + "line-height:1.35;text-align:right;white-space:nowrap\">"
+                + phone + "<br>" + website + "</span>";
+
+        return out.substring(0, smallEnd) + contact + out.substring(smallEnd);
     }
 
-    // Sahada daha önce Android önizleme ekranını açtığı doğrulanan sade WebView yazdırma yolu.
-    // Tek sayfaya sığdırma belge HTML/CSS tarafında yapılır; Android PrintManager çağrısı bekletilmez.
+    // Sahada doğrulanan sade Android WebView yazdırma yolu korunur.
     private void openPrint(String html, String mode) {
         final WebView pv = new WebView(this);
         printViews.add(pv);
