@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void printHtml(String html, String mode) { runOnUiThread(() -> openPrint(html, mode)); }
-        @JavascriptInterface public String appVersion() { return "2.3.0"; }
+        @JavascriptInterface public String appVersion() { return "2.5.1"; }
     }
 
     private class TcpClient extends Thread {
@@ -145,33 +145,81 @@ public class MainActivity extends Activity {
         final WebView pv = new WebView(this);
         printViews.add(pv);
         WebSettings ps = pv.getSettings();
-        ps.setJavaScriptEnabled(false); ps.setDefaultTextEncodingName("UTF-8");
+        ps.setJavaScriptEnabled(true);
+        ps.setDefaultTextEncodingName("UTF-8");
         pv.setWebViewClient(new WebViewClient() {
             private boolean done = false;
             @Override public void onPageFinished(WebView view, String url) {
-                if (done) return; done = true;
-                PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
-                String jobName = mode != null && mode.startsWith("70") ? "MUBEL KANTAR 70mm" : "MUBEL KANTAR A4";
-                PrintDocumentAdapter adapter = pv.createPrintDocumentAdapter(jobName);
-                PrintAttributes.Builder b = new PrintAttributes.Builder().setColorMode(PrintAttributes.COLOR_MODE_COLOR)
-                        .setResolution(new PrintAttributes.Resolution("mubel", "MUBEL", 300, 300));
-                if (mode != null && mode.startsWith("70")) {
-                    PrintAttributes.MediaSize custom = new PrintAttributes.MediaSize("MUBEL70", "70 mm Kantar", 2756, 7874);
-                    b.setMediaSize(custom); b.setMinMargins(new PrintAttributes.Margins(120,120,120,120));
-                } else {
-                    b.setMediaSize(PrintAttributes.MediaSize.ISO_A4.asLandscape()); b.setMinMargins(new PrintAttributes.Margins(250,250,250,250));
-                }
-                pm.print(jobName, adapter, b.build());
-                pv.postDelayed(() -> { printViews.remove(pv); pv.destroy(); }, 60000);
+                if (done) return;
+                done = true;
+                // Logo/yazı yerleşimi tamamlandıktan sonra gerçek sayfa ölçüsünü hesapla,
+                // içeriği tek sayfaya otomatik sığdır ve ancak ondan sonra yazdırma önizlemesini aç.
+                pv.postDelayed(() -> pv.evaluateJavascript(
+                        buildFitJavascript(mode),
+                        fitResult -> pv.postDelayed(() -> startPrintJob(pv, mode), 120)
+                ), 180);
             }
         });
         pv.loadDataWithBaseURL("https://mubel.local/", html, "text/html", "UTF-8", null);
+    }
+
+    private String buildFitJavascript(String mode) {
+        boolean is70 = mode != null && mode.startsWith("70");
+        String width = is70 ? "62mm" : "279mm";
+        String height = "192mm";
+        String page = is70 ? "70mm 200mm" : "A4 landscape";
+        String margin = is70 ? "3mm" : "5mm";
+        String minFont = is70 ? "5" : "6";
+        return "(function(){try{" +
+                "var b=document.body,h=document.head;" +
+                "if(!b||b.getAttribute('data-mubel-fit')==='1')return 'ready';" +
+                "b.setAttribute('data-mubel-fit','1');" +
+                "var st=document.createElement('style');" +
+                "st.textContent='@page{size:" + page + ";margin:" + margin + "}' +" +
+                "'html,body{margin:0!important;padding:0!important;width:" + width + "!important;height:" + height + "!important;overflow:hidden!important;}' +" +
+                "'.mubelFitPage{position:relative!important;width:" + width + "!important;height:" + height + "!important;overflow:hidden!important;}' +" +
+                "'.mubelFitContent{position:absolute!important;left:0!important;top:0!important;width:100%!important;transform-origin:top left!important;}' +" +
+                "'.mubelFitContent .note,.mubelFitContent p,.mubelFitContent .item,.mubelFitContent .row b,.mubelFitContent .foot,.mubelFitContent .verify{overflow-wrap:anywhere!important;word-break:break-word!important;}';" +
+                "h.appendChild(st);" +
+                "var pg=document.createElement('div'),ct=document.createElement('div');" +
+                "pg.className='mubelFitPage';ct.className=(b.className?b.className+' ':'')+'mubelFitContent';" +
+                "while(b.firstChild)ct.appendChild(b.firstChild);" +
+                "pg.appendChild(ct);b.appendChild(pg);" +
+                "var n=ct.querySelector('.note')||ct.querySelector('p');" +
+                "if(n){var fs=parseFloat(getComputedStyle(n).fontSize)||12;" +
+                "while(ct.scrollHeight>pg.clientHeight&&fs>" + minFont + "){fs=Math.max(" + minFont + ",fs-0.5);n.style.fontSize=fs+'px';}}" +
+                "var pw=pg.clientWidth,ph=pg.clientHeight,cw=Math.max(ct.scrollWidth,ct.offsetWidth),ch=Math.max(ct.scrollHeight,ct.offsetHeight);" +
+                "var sc=Math.min(1,pw/Math.max(1,cw),ph/Math.max(1,ch));" +
+                "if(!isFinite(sc)||sc<=0)sc=1;ct.style.transform='scale('+sc+')';" +
+                "return sc.toFixed(4);" +
+                "}catch(e){return 'err:'+e.message;}})()";
+    }
+
+    private void startPrintJob(WebView pv, String mode) {
+        if (isFinishing() || pv == null) return;
+        PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+        String jobName = mode != null && mode.startsWith("70") ? "MUBEL KANTAR 70mm" : "MUBEL KANTAR A4";
+        PrintDocumentAdapter adapter = pv.createPrintDocumentAdapter(jobName);
+        PrintAttributes.Builder b = new PrintAttributes.Builder()
+                .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                .setResolution(new PrintAttributes.Resolution("mubel", "MUBEL", 300, 300));
+        if (mode != null && mode.startsWith("70")) {
+            PrintAttributes.MediaSize custom = new PrintAttributes.MediaSize("MUBEL70", "70 mm Kantar", 2756, 7874);
+            b.setMediaSize(custom);
+            b.setMinMargins(new PrintAttributes.Margins(120,120,120,120));
+        } else {
+            b.setMediaSize(PrintAttributes.MediaSize.ISO_A4.asLandscape());
+            b.setMinMargins(new PrintAttributes.Margins(250,250,250,250));
+        }
+        pm.print(jobName, adapter, b.build());
+        pv.postDelayed(() -> { printViews.remove(pv); try { pv.destroy(); } catch (Exception ignored) {} }, 60000);
     }
 
     @Override protected void onDestroy() {
         if (tcpClient != null) tcpClient.stopClient();
         if (web != null) web.destroy();
         for (WebView v : printViews) { try { v.destroy(); } catch (Exception ignored) {} }
-        printViews.clear(); super.onDestroy();
+        printViews.clear();
+        super.onDestroy();
     }
 }
