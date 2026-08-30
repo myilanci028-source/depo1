@@ -1,0 +1,33 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.mubel.kantar'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.mubel.kantar'
+        minSdk 23
+        targetSdk 35
+        versionCode 3
+        versionName '2.0.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+        debug {
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+}
