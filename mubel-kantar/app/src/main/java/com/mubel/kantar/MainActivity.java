@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void printHtml(String html, String mode) { runOnUiThread(() -> openPrint(html, mode)); }
-        @JavascriptInterface public String appVersion() { return "2.0.0"; }
+        @JavascriptInterface public String appVersion() { return "2.3.0"; }
     }
 
     private class TcpClient extends Thread {
