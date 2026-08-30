@@ -56,25 +56,38 @@ public class MainActivity extends Activity {
     }
 
     private void js(String script) {
-        runOnUiThread(() -> { if (web != null) web.evaluateJavascript(script, null); });
+        runOnUiThread(() -> {
+            if (web != null) web.evaluateJavascript(script, null);
+        });
     }
 
     private String q(String value) {
         if (value == null) return "null";
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r") + "\"";
+        return "\"" + value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r") + "\"";
     }
 
     public class Bridge {
-        @JavascriptInterface public void connect(String host, int port) {
+        @JavascriptInterface
+        public void connect(String host, int port) {
             disconnect();
             tcpClient = new TcpClient(host, port);
             tcpClient.start();
         }
-        @JavascriptInterface public void disconnect() {
-            if (tcpClient != null) { tcpClient.stopClient(); tcpClient = null; }
+
+        @JavascriptInterface
+        public void disconnect() {
+            if (tcpClient != null) {
+                tcpClient.stopClient();
+                tcpClient = null;
+            }
             js("window.MUBEL&&window.MUBEL.nativeStatus('KAPALI','');");
         }
-        @JavascriptInterface public void pickLogo() {
+
+        @JavascriptInterface
+        public void pickLogo() {
             runOnUiThread(() -> {
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -82,20 +95,48 @@ public class MainActivity extends Activity {
                 startActivityForResult(i, PICK_LOGO);
             });
         }
-        @JavascriptInterface public void printHtml(String html, String mode) { runOnUiThread(() -> openPrint(html, mode)); }
-        @JavascriptInterface public String appVersion() { return "2.5.1"; }
+
+        @JavascriptInterface
+        public void printHtml(String html, String mode) {
+            if (html == null || html.trim().isEmpty()) {
+                js("window.MUBEL&&window.MUBEL.toast('Yazdırılacak belge boş');");
+                return;
+            }
+            runOnUiThread(() -> {
+                try {
+                    openPrint(html, mode);
+                } catch (Exception e) {
+                    js("window.MUBEL&&window.MUBEL.toast(" + q("Yazdırma açılamadı: " + e.getMessage()) + ");");
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String appVersion() {
+            return "2.7.0";
+        }
     }
 
     private class TcpClient extends Thread {
-        private final String host; private final int port;
+        private final String host;
+        private final int port;
         private final AtomicBoolean running = new AtomicBoolean(true);
         private Socket socket;
-        TcpClient(String host, int port) { this.host = host; this.port = port; }
+
+        TcpClient(String host, int port) {
+            this.host = host;
+            this.port = port;
+        }
+
         void stopClient() {
             running.set(false);
-            try { if (socket != null) socket.close(); } catch (Exception ignored) {}
+            try {
+                if (socket != null) socket.close();
+            } catch (Exception ignored) {}
         }
-        @Override public void run() {
+
+        @Override
+        public void run() {
             try {
                 js("window.MUBEL&&window.MUBEL.nativeStatus('BAĞLANIYOR'," + q(host + ":" + port) + ");");
                 socket = new Socket();
@@ -117,18 +158,25 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception e) {
                 js("window.MUBEL&&window.MUBEL.nativeStatus('HATA'," + q(e.getClass().getSimpleName() + ": " + e.getMessage()) + ");");
-            } finally { stopClient(); }
+            } finally {
+                stopClient();
+            }
         }
     }
 
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PICK_LOGO && resultCode == RESULT_OK && data != null && data.getData() != null) {
             Uri uri = data.getData();
-            try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Exception ignored) {}
-            try (InputStream in = getContentResolver().openInputStream(uri); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            try {
+                getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (Exception ignored) {}
+            try (InputStream in = getContentResolver().openInputStream(uri);
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                 if (in == null) throw new Exception("Dosya açılamadı");
-                byte[] buf = new byte[8192]; int n;
+                byte[] buf = new byte[8192];
+                int n;
                 while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
                 byte[] bytes = out.toByteArray();
                 String type = getContentResolver().getType(uri);
@@ -143,24 +191,44 @@ public class MainActivity extends Activity {
 
     private void openPrint(String html, String mode) {
         final WebView pv = new WebView(this);
+        final AtomicBoolean printStarted = new AtomicBoolean(false);
         printViews.add(pv);
+
         WebSettings ps = pv.getSettings();
         ps.setJavaScriptEnabled(true);
+        ps.setDomStorageEnabled(true);
+        ps.setAllowFileAccess(true);
+        ps.setAllowContentAccess(true);
         ps.setDefaultTextEncodingName("UTF-8");
+
         pv.setWebViewClient(new WebViewClient() {
-            private boolean done = false;
-            @Override public void onPageFinished(WebView view, String url) {
-                if (done) return;
-                done = true;
-                // Logo/yazı yerleşimi tamamlandıktan sonra gerçek sayfa ölçüsünü hesapla,
-                // içeriği tek sayfaya otomatik sığdır ve ancak ondan sonra yazdırma önizlemesini aç.
-                pv.postDelayed(() -> pv.evaluateJavascript(
-                        buildFitJavascript(mode),
-                        fitResult -> pv.postDelayed(() -> startPrintJob(pv, mode), 120)
-                ), 180);
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // Eski sürüm callback'i beklediği için bazı Android cihazlarda burada takılıyordu.
+                // Artık sığdırma JS'i ateşleniyor ama yazdırma onun callback'ine bağlı değil.
+                pv.postDelayed(() -> {
+                    try {
+                        pv.evaluateJavascript(buildFitJavascript(mode), null);
+                    } catch (Exception ignored) {}
+                }, 120);
+                pv.postDelayed(() -> startPrintJobOnce(pv, mode, printStarted), 520);
             }
         });
+
         pv.loadDataWithBaseURL("https://mubel.local/", html, "text/html", "UTF-8", null);
+
+        // onPageFinished bazı WebView sürümlerinde gelmezse dahi önizleme açılacak güvenlik ağı.
+        pv.postDelayed(() -> startPrintJobOnce(pv, mode, printStarted), 1800);
+    }
+
+    private void startPrintJobOnce(WebView pv, String mode, AtomicBoolean printStarted) {
+        if (!printStarted.compareAndSet(false, true)) return;
+        try {
+            startPrintJob(pv, mode);
+        } catch (Exception e) {
+            printStarted.set(false);
+            js("window.MUBEL&&window.MUBEL.toast(" + q("Yazdırma önizlemesi açılamadı: " + e.getMessage()) + ");");
+        }
     }
 
     private String buildFitJavascript(String mode) {
@@ -179,7 +247,7 @@ public class MainActivity extends Activity {
                 "'html,body{margin:0!important;padding:0!important;width:" + width + "!important;height:" + height + "!important;overflow:hidden!important;}' +" +
                 "'.mubelFitPage{position:relative!important;width:" + width + "!important;height:" + height + "!important;overflow:hidden!important;}' +" +
                 "'.mubelFitContent{position:absolute!important;left:0!important;top:0!important;width:100%!important;transform-origin:top left!important;}' +" +
-                "'.mubelFitContent .note,.mubelFitContent p,.mubelFitContent .item,.mubelFitContent .row b,.mubelFitContent .foot,.mubelFitContent .verify{overflow-wrap:anywhere!important;word-break:break-word!important;}';" +
+                "'.mubelFitContent .note,.mubelFitContent p,.mubelFitContent .item,.mubelFitContent .row b,.mubelFitContent .route,.mubelFitContent .foot,.mubelFitContent .verify{overflow-wrap:anywhere!important;word-break:break-word!important;}';" +
                 "h.appendChild(st);" +
                 "var pg=document.createElement('div'),ct=document.createElement('div');" +
                 "pg.className='mubelFitPage';ct.className=(b.className?b.className+' ':'')+'mubelFitContent';" +
@@ -198,27 +266,43 @@ public class MainActivity extends Activity {
     private void startPrintJob(WebView pv, String mode) {
         if (isFinishing() || pv == null) return;
         PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
-        String jobName = mode != null && mode.startsWith("70") ? "MUBEL KANTAR 70mm" : "MUBEL KANTAR A4";
+        if (pm == null) throw new IllegalStateException("Android yazdırma servisi bulunamadı");
+
+        boolean is70 = mode != null && mode.startsWith("70");
+        String jobName = is70 ? "MUBEL KANTAR 70mm" : "MUBEL KANTAR A4";
         PrintDocumentAdapter adapter = pv.createPrintDocumentAdapter(jobName);
         PrintAttributes.Builder b = new PrintAttributes.Builder()
                 .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
                 .setResolution(new PrintAttributes.Resolution("mubel", "MUBEL", 300, 300));
-        if (mode != null && mode.startsWith("70")) {
-            PrintAttributes.MediaSize custom = new PrintAttributes.MediaSize("MUBEL70", "70 mm Kantar", 2756, 7874);
+
+        if (is70) {
+            PrintAttributes.MediaSize custom = new PrintAttributes.MediaSize(
+                    "MUBEL70", "70 mm Kantar", 2756, 7874);
             b.setMediaSize(custom);
-            b.setMinMargins(new PrintAttributes.Margins(120,120,120,120));
+            b.setMinMargins(new PrintAttributes.Margins(80, 80, 80, 80));
         } else {
             b.setMediaSize(PrintAttributes.MediaSize.ISO_A4.asLandscape());
-            b.setMinMargins(new PrintAttributes.Margins(250,250,250,250));
+            b.setMinMargins(new PrintAttributes.Margins(180, 180, 180, 180));
         }
+
         pm.print(jobName, adapter, b.build());
-        pv.postDelayed(() -> { printViews.remove(pv); try { pv.destroy(); } catch (Exception ignored) {} }, 60000);
+        pv.postDelayed(() -> {
+            printViews.remove(pv);
+            try {
+                pv.destroy();
+            } catch (Exception ignored) {}
+        }, 60000);
     }
 
-    @Override protected void onDestroy() {
+    @Override
+    protected void onDestroy() {
         if (tcpClient != null) tcpClient.stopClient();
         if (web != null) web.destroy();
-        for (WebView v : printViews) { try { v.destroy(); } catch (Exception ignored) {} }
+        for (WebView v : printViews) {
+            try {
+                v.destroy();
+            } catch (Exception ignored) {}
+        }
         printViews.clear();
         super.onDestroy();
     }
