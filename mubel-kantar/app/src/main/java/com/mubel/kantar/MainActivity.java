@@ -50,6 +50,19 @@ public class MainActivity extends Activity {
                 Uri u = request.getUrl();
                 return "app".equals(u.getScheme());
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // v2.4 parser is a separate asset so field-learning can evolve without
+                // disturbing the proven UI/PDF/recording layer.
+                view.evaluateJavascript(
+                    "(function(){if(window.__MUBEL_V24_TAG__)return;window.__MUBEL_V24_TAG__=1;" +
+                    "var s=document.createElement('script');s.src='v24fix.js?v=24';" +
+                    "s.onerror=function(){console.log('v24fix load failed');};document.body.appendChild(s);})();",
+                    null
+                );
+            }
         });
         setContentView(web);
         web.loadUrl("file:///android_asset/index.html");
@@ -83,7 +96,7 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void printHtml(String html, String mode) { runOnUiThread(() -> openPrint(html, mode)); }
-        @JavascriptInterface public String appVersion() { return "2.3.0"; }
+        @JavascriptInterface public String appVersion() { return "2.4.0"; }
     }
 
     private class TcpClient extends Thread {
