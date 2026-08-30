@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.mubel.kantar.v27'
+        applicationId 'com.mubel.kantar.v28'
         minSdk 23
         targetSdk 35
-        versionCode 270
-        versionName '2.7.0'
+        versionCode 280
+        versionName '2.8.0'
     }
 
     buildTypes {
