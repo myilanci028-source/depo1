@@ -50,6 +50,16 @@ public class MainActivity extends Activity {
                 Uri u = request.getUrl();
                 return "app".equals(u.getScheme());
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                try {
+                    view.evaluateJavascript(
+                            "(function(){document.querySelectorAll('.ver').forEach(function(e){e.textContent=e.textContent.replace('v2.7','v2.8');});})();",
+                            null);
+                } catch (Exception ignored) {}
+            }
         });
         setContentView(web);
         web.loadUrl("file:///android_asset/index.html");
@@ -83,9 +93,9 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void printHtml(String html, String mode) {
-            runOnUiThread(() -> openPrint(html, mode));
+            runOnUiThread(() -> openPrint(prepareHtmlForV28(html, mode), mode));
         }
-        @JavascriptInterface public String appVersion() { return "2.7.0"; }
+        @JavascriptInterface public String appVersion() { return "2.8.0"; }
     }
 
     private class TcpClient extends Thread {
@@ -143,8 +153,52 @@ public class MainActivity extends Activity {
         }
     }
 
+    // V2.8: A4 sağ üst bilgi bloğunu düzenler.
+    // Telefon + web adresini firma bloğundan alıp TARTIM RAPORU / Fiş / Tarih altına taşır.
+    private String prepareHtmlForV28(String html, String mode) {
+        if (html == null) return "";
+        String out = html.replace("MUBEL KANTAR v2.7", "MUBEL KANTAR v2.8");
+        if (mode != null && mode.startsWith("70")) return out;
+        if (out.contains("class=\"reportContact\"")) return out;
+
+        final String reportMarker = "<div class=\"title\">TARTIM RAPORU<br><small>";
+        int reportPos = out.indexOf(reportMarker);
+        if (reportPos < 0) return out;
+
+        int leftClose = out.lastIndexOf("</div></div>", reportPos);
+        if (leftClose < 0) return out;
+        int metaStart = out.lastIndexOf("<div>", leftClose);
+        if (metaStart < 0) return out;
+        int metaContentStart = metaStart + 5;
+        int metaEnd = out.indexOf("</div>", metaContentStart);
+        if (metaEnd < 0 || metaEnd > reportPos) return out;
+
+        String meta = out.substring(metaContentStart, metaEnd);
+        String[] parts = meta.split("<br>");
+        if (parts.length < 3) return out;
+
+        String phone = parts[1].trim();
+        String webAddress = parts[2].trim();
+        StringBuilder leftMeta = new StringBuilder(parts[0]);
+        for (int i = 3; i < parts.length; i++) {
+            if (!parts[i].trim().isEmpty()) leftMeta.append("<br>").append(parts[i]);
+        }
+
+        out = out.substring(0, metaContentStart) + leftMeta + out.substring(metaEnd);
+
+        reportPos = out.indexOf(reportMarker);
+        if (reportPos < 0) return out;
+        int smallEnd = out.indexOf("</small>", reportPos);
+        if (smallEnd < 0) return out;
+
+        String contact = "<br><span class=\"reportContact\" style=\"display:inline-block;margin-top:3px;font-size:9px;font-weight:600;line-height:1.3;white-space:nowrap\">"
+                + phone + "<br>" + webAddress + "</span>";
+        out = out.substring(0, smallEnd) + contact + out.substring(smallEnd);
+        return out;
+    }
+
     // Sahada daha önce Android önizleme ekranını açtığı doğrulanan sade WebView yazdırma yolu.
-    // Tek sayfaya sığdırma artık belge HTML/CSS tarafında yapılır; Android PrintManager çağrısı bekletilmez.
+    // Tek sayfaya sığdırma belge HTML/CSS tarafında yapılır; Android PrintManager çağrısı bekletilmez.
     private void openPrint(String html, String mode) {
         final WebView pv = new WebView(this);
         printViews.add(pv);
