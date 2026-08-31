@@ -1,0 +1,1 @@
+V2.10.4 fix plan: render mail PDF WebView at A4 CSS pixel size multiplied by Android display density, then scale the complete 1123x794 CSS-page viewport to 842x595 PDF points. This prevents high-density Android devices from clipping the lower part of the A4 report. Preserve SMTP, scale decoder, print and records behavior.
