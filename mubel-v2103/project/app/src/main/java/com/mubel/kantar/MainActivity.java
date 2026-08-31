@@ -31,7 +31,6 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -45,7 +44,6 @@ import javax.activation.DataHandler;
 import javax.activation.FileDataSource;
 import javax.mail.Authenticator;
 import javax.mail.Message;
-import javax.mail.MessagingException;
 import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
@@ -55,8 +53,13 @@ import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
 
 public class MainActivity extends Activity {
-    private static final int REQ_LOGO = 4103;
+    private static final int REQ_LOGO = 4104;
     private static final String DEFAULT_MAIL = "yilancioglu_merkez@yilancioglu.com.tr";
+    private static final int A4_CSS_WIDTH = 1123;
+    private static final int A4_CSS_HEIGHT = 794;
+    private static final int A4_PDF_WIDTH = 842;
+    private static final int A4_PDF_HEIGHT = 595;
+
     private FrameLayout root;
     private WebView web;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -69,7 +72,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mailPrefs = getSharedPreferences("mubel_mail_v2103", MODE_PRIVATE);
+        // Mail PDF'sinde tüm A4 dokümanın görünmeyen kısmının da Canvas'a çizilebilmesini sağlar.
+        WebView.enableSlowWholeDocumentDraw();
+        mailPrefs = getSharedPreferences("mubel_mail_v2104", MODE_PRIVATE);
         root = new FrameLayout(this);
         web = new WebView(this);
         configureWebView(web);
@@ -92,7 +97,13 @@ public class MainActivity extends Activity {
         s.setDefaultTextEncodingName("UTF-8");
         w.setBackgroundColor(Color.rgb(15,16,18));
         w.setWebChromeClient(new WebChromeClient());
-        w.setWebViewClient(new WebViewClient());
+        w.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                if (view == web) {
+                    view.evaluateJavascript("document.querySelectorAll('.ver').forEach(function(e){e.textContent=e.textContent.replace(/v2\\.10\\.3/g,'v2.10.4');});", null);
+                }
+            }
+        });
     }
 
     private void js(String script) {
@@ -138,7 +149,10 @@ public class MainActivity extends Activity {
                 s.connect(new InetSocketAddress(host, port), 5500);
                 s.setTcpNoDelay(true);
                 s.setKeepAlive(true);
-                if (generation != connectionGeneration.get()) { try { s.close(); } catch (Exception ignored) {} return; }
+                if (generation != connectionGeneration.get()) {
+                    try { s.close(); } catch (Exception ignored) {}
+                    return;
+                }
                 scaleSocket = s;
                 scaleStatus("BAĞLI", host + ":" + port);
                 InputStream in = s.getInputStream();
@@ -211,7 +225,9 @@ public class MainActivity extends Activity {
         a.username = mailPrefs.getString("username", DEFAULT_MAIL);
         a.password = mailPrefs.getString("password", "");
         a.fromName = mailPrefs.getString("fromName", "YILANCIOĞLU KANTAR");
-        if (a.host.trim().isEmpty() || a.port <= 0 || a.sender.trim().isEmpty() || a.username.trim().isEmpty()) throw new Exception("SMTP ayarları eksik");
+        if (a.host.trim().isEmpty() || a.port <= 0 || a.sender.trim().isEmpty() || a.username.trim().isEmpty()) {
+            throw new Exception("SMTP ayarları eksik");
+        }
         if (a.password.isEmpty()) throw new Exception("SMTP şifresi kayıtlı değil");
         return a;
     }
@@ -255,21 +271,26 @@ public class MainActivity extends Activity {
                 MailAccount a = account();
                 Session session = sessionFor(a);
                 MimeMessage m = baseMessage(session, a, to, "MUBEL KANTAR SMTP TEST");
-                m.setText("MUBEL KANTAR SMTP test mesajıdır.\n" + new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.forLanguageTag("tr-TR")).format(new Date()), "UTF-8");
+                m.setText("MUBEL KANTAR SMTP test mesajıdır.\n" +
+                        new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.forLanguageTag("tr-TR")).format(new Date()), "UTF-8");
                 Transport t = session.getTransport("smtp");
                 try {
                     t.connect(a.host, a.port, a.username, a.password);
                     t.sendMessage(m, m.getAllRecipients());
-                } finally { try { t.close(); } catch (Exception ignored) {} }
+                } finally {
+                    try { t.close(); } catch (Exception ignored) {}
+                }
                 long ms = System.currentTimeMillis() - start;
-                testStatus("OK", "SMTP sunucusu test mailini kabul etti · " + String.format(Locale.US, "%.1f sn", ms / 1000.0));
+                testStatus("OK", "SMTP sunucusu test mailini kabul etti · " +
+                        String.format(Locale.US, "%.1f sn", ms / 1000.0));
             } catch (Exception e) {
                 testStatus("HATA", friendly(e));
             }
         });
     }
 
-    private void renderPdfAndSend(final String html, final String to, final String subject, final String body, final String fis) {
+    private void renderPdfAndSend(final String html, final String to, final String subject,
+                                  final String body, final String fis) {
         if (!mailBusy.compareAndSet(false, true)) {
             mailStatus("HATA", "Başka bir mail gönderimi devam ediyor");
             return;
@@ -277,7 +298,7 @@ public class MainActivity extends Activity {
         mailStatus("PROGRESS", "1/4 PDF hazırlanıyor…");
         main.post(() -> createPdfFromHtml(html, fis, new PdfResult() {
             @Override public void ok(File pdf) {
-                mailStatus("PDF", "PDF hazır · " + Math.max(1, pdf.length() / 1024) + " KB");
+                mailStatus("PDF", "A4 tam sayfa PDF hazır · " + Math.max(1, pdf.length() / 1024) + " KB");
                 io.execute(() -> {
                     try {
                         MailAccount a = account();
@@ -299,7 +320,9 @@ public class MainActivity extends Activity {
                         try {
                             t.connect(a.host, a.port, a.username, a.password);
                             t.sendMessage(m, m.getAllRecipients());
-                        } finally { try { t.close(); } catch (Exception ignored) {} }
+                        } finally {
+                            try { t.close(); } catch (Exception ignored) {}
+                        }
                         mailStatus("OK", "PDF ekli kantar fişi SMTP sunucusu tarafından kabul edildi");
                     } catch (Exception e) {
                         mailStatus("HATA", friendly(e));
@@ -309,6 +332,7 @@ public class MainActivity extends Activity {
                     }
                 });
             }
+
             @Override public void fail(String message) {
                 mailBusy.set(false);
                 mailStatus("HATA", message);
@@ -317,67 +341,110 @@ public class MainActivity extends Activity {
     }
 
     private void createPdfFromHtml(final String html, final String fis, final PdfResult callback) {
+        final float density = Math.max(1f, getResources().getDisplayMetrics().density);
+        final int renderWidth = Math.max(A4_CSS_WIDTH, Math.round(A4_CSS_WIDTH * density));
+        final int renderHeight = Math.max(A4_CSS_HEIGHT, Math.round(A4_CSS_HEIGHT * density));
+
         final WebView pdfView = new WebView(this);
         WebSettings s = pdfView.getSettings();
         s.setJavaScriptEnabled(false);
         s.setAllowFileAccess(true);
+        s.setAllowContentAccess(true);
         s.setLoadWithOverviewMode(false);
         s.setUseWideViewPort(true);
+        s.setDefaultTextEncodingName("UTF-8");
+        s.setTextZoom(100);
         pdfView.setBackgroundColor(Color.WHITE);
         pdfView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(1123, 794);
-        pdfView.setTranslationX(3000f);
+        pdfView.setVerticalScrollBarEnabled(false);
+        pdfView.setHorizontalScrollBarEnabled(false);
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(renderWidth, renderHeight);
+        pdfView.setTranslationX(renderWidth + 2000f);
         root.addView(pdfView, lp);
+
         final AtomicBoolean done = new AtomicBoolean(false);
         final Runnable timeout = () -> {
             if (done.compareAndSet(false, true)) {
                 try { root.removeView(pdfView); pdfView.destroy(); } catch (Exception ignored) {}
-                callback.fail("PDF oluşturma 10 saniyeyi aştı. Tekrar deneyin.");
+                callback.fail("PDF oluşturma 12 saniyeyi aştı. Tekrar deneyin.");
             }
         };
-        main.postDelayed(timeout, 10000);
+        main.postDelayed(timeout, 12000);
+
         pdfView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 main.postDelayed(() -> {
                     if (!done.compareAndSet(false, true)) return;
                     main.removeCallbacks(timeout);
+                    PdfDocument doc = null;
+                    FileOutputStream fos = null;
                     try {
-                        int width = 1123;
-                        int contentHeight = Math.round(view.getContentHeight() * view.getScale());
-                        if (contentHeight < 794) contentHeight = 794;
-                        if (contentHeight > 5000) contentHeight = 5000;
-                        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(contentHeight, View.MeasureSpec.EXACTLY));
-                        view.layout(0, 0, width, contentHeight);
-                        PdfDocument doc = new PdfDocument();
-                        PdfDocument.PageInfo info = new PdfDocument.PageInfo.Builder(842, 595, 1).create();
+                        // Kritik V2.10.4 düzeltmesi: 1123x794 CSS A4 alanını Android density ile
+                        // gerçek cihaz pikseline çevirip TAM görünür alan olarak çiziyoruz.
+                        view.measure(
+                                View.MeasureSpec.makeMeasureSpec(renderWidth, View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(renderHeight, View.MeasureSpec.EXACTLY));
+                        view.layout(0, 0, renderWidth, renderHeight);
+                        view.scrollTo(0, 0);
+                        view.invalidate();
+
+                        doc = new PdfDocument();
+                        PdfDocument.PageInfo info = new PdfDocument.PageInfo.Builder(
+                                A4_PDF_WIDTH, A4_PDF_HEIGHT, 1).create();
                         PdfDocument.Page page = doc.startPage(info);
                         Canvas canvas = page.getCanvas();
                         canvas.drawColor(Color.WHITE);
-                        float scale = Math.min(842f / width, 595f / contentHeight);
-                        float dx = (842f - width * scale) / 2f;
-                        float dy = (595f - contentHeight * scale) / 2f;
+
+                        float scale = Math.min(
+                                A4_PDF_WIDTH / (float) renderWidth,
+                                A4_PDF_HEIGHT / (float) renderHeight);
+                        float dx = (A4_PDF_WIDTH - renderWidth * scale) / 2f;
+                        float dy = (A4_PDF_HEIGHT - renderHeight * scale) / 2f;
+
                         canvas.save();
                         canvas.translate(dx, dy);
                         canvas.scale(scale, scale);
                         view.draw(canvas);
                         canvas.restore();
                         doc.finishPage(page);
+
                         File dir = new File(getCacheDir(), "mailpdf");
-                        if (!dir.exists()) dir.mkdirs();
-                        File out = new File(dir, safeName(fis) + "_" + System.currentTimeMillis() + ".pdf");
-                        FileOutputStream fos = new FileOutputStream(out);
+                        if (!dir.exists() && !dir.mkdirs()) {
+                            throw new Exception("PDF önbellek klasörü oluşturulamadı");
+                        }
+                        File out = new File(dir,
+                                safeName(fis) + "_" + System.currentTimeMillis() + ".pdf");
+                        fos = new FileOutputStream(out);
                         doc.writeTo(fos);
-                        fos.flush(); fos.close(); doc.close();
-                        root.removeView(pdfView); pdfView.destroy();
-                        if (!out.exists() || out.length() < 500) callback.fail("PDF dosyası oluşturulamadı"); else callback.ok(out);
+                        fos.flush();
+                        fos.close();
+                        fos = null;
+                        doc.close();
+                        doc = null;
+
+                        root.removeView(pdfView);
+                        pdfView.destroy();
+
+                        if (!out.exists() || out.length() < 1000) {
+                            callback.fail("PDF dosyası oluşturulamadı");
+                        } else {
+                            callback.ok(out);
+                        }
                     } catch (Exception e) {
+                        try { if (fos != null) fos.close(); } catch (Exception ignored) {}
+                        try { if (doc != null) doc.close(); } catch (Exception ignored) {}
                         try { root.removeView(pdfView); pdfView.destroy(); } catch (Exception ignored) {}
                         callback.fail("PDF oluşturma hatası: " + friendly(e));
                     }
-                }, 450);
+                }, 650);
             }
         });
-        pdfView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
+
+        String renderHtml = html == null ? "" : html;
+        renderHtml = renderHtml.replace("MUBEL KANTAR v2.10.3", "MUBEL KANTAR v2.10.4");
+        pdfView.loadDataWithBaseURL("file:///android_asset/", renderHtml,
+                "text/html", "UTF-8", null);
     }
 
     private String safeName(String s) {
@@ -393,16 +460,23 @@ public class MainActivity extends Activity {
             pv.getSettings().setJavaScriptEnabled(false);
             pv.getSettings().setAllowFileAccess(true);
             pv.setBackgroundColor(Color.WHITE);
-            root.addView(pv, new FrameLayout.LayoutParams(2,2));
+            root.addView(pv, new FrameLayout.LayoutParams(2, 2));
             pv.setWebViewClient(new WebViewClient() {
                 @Override public void onPageFinished(WebView view, String url) {
                     main.postDelayed(() -> {
                         try {
                             PrintManager pm = (PrintManager) getSystemService(PRINT_SERVICE);
                             PrintDocumentAdapter adapter = pv.createPrintDocumentAdapter("MUBEL_KANTAR");
-                            PrintAttributes.Builder b = new PrintAttributes.Builder().setColorMode(PrintAttributes.COLOR_MODE_COLOR).setResolution(new PrintAttributes.Resolution("mubel","MUBEL",300,300));
-                            if ("70".equals(mode)) b.setMediaSize(new PrintAttributes.MediaSize("MUBEL70","70 mm",2756,7874)).setMinMargins(PrintAttributes.Margins.NO_MARGINS);
-                            else b.setMediaSize(PrintAttributes.MediaSize.ISO_A4.asLandscape()).setMinMargins(PrintAttributes.Margins.NO_MARGINS);
+                            PrintAttributes.Builder b = new PrintAttributes.Builder()
+                                    .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                                    .setResolution(new PrintAttributes.Resolution("mubel", "MUBEL", 300, 300));
+                            if ("70".equals(mode)) {
+                                b.setMediaSize(new PrintAttributes.MediaSize("MUBEL70", "70 mm", 2756, 7874))
+                                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS);
+                            } else {
+                                b.setMediaSize(PrintAttributes.MediaSize.ISO_A4.asLandscape())
+                                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS);
+                            }
                             pm.print("MUBEL KANTAR", adapter, b.build());
                             js("window.MUBEL_PRINT_NATIVE_OK&&window.MUBEL_PRINT_NATIVE_OK();");
                         } catch (Exception e) {
@@ -434,11 +508,19 @@ public class MainActivity extends Activity {
             try {
                 InputStream in = getContentResolver().openInputStream(uri);
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                byte[] buf = new byte[8192]; int r; int total = 0;
-                while (in != null && (r = in.read(buf)) > 0) { total += r; if (total > 2_500_000) throw new Exception("Logo dosyası 2,5 MB'tan büyük"); out.write(buf,0,r); }
+                byte[] buf = new byte[8192];
+                int r;
+                int total = 0;
+                while (in != null && (r = in.read(buf)) > 0) {
+                    total += r;
+                    if (total > 2_500_000) throw new Exception("Logo dosyası 2,5 MB'tan büyük");
+                    out.write(buf, 0, r);
+                }
                 if (in != null) in.close();
-                String mime = getContentResolver().getType(uri); if (mime == null) mime = "image/png";
-                String dataUri = "data:" + mime + ";base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
+                String mime = getContentResolver().getType(uri);
+                if (mime == null) mime = "image/png";
+                String dataUri = "data:" + mime + ";base64," +
+                        Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
                 js("window.MUBEL&&MUBEL.setLogo(" + q(dataUri) + ");");
             } catch (Exception e) {
                 js("window.MUBEL&&MUBEL.toast(" + q("Logo yüklenemedi: " + friendly(e)) + ");");
@@ -454,11 +536,19 @@ public class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (web != null && web.canGoBack()) web.goBack(); else super.onBackPressed();
+        if (web != null && web.canGoBack()) web.goBack();
+        else super.onBackPressed();
     }
 
-    private interface PdfResult { void ok(File pdf); void fail(String message); }
-    private static class MailAccount { String host, security, sender, username, password, fromName; int port; }
+    private interface PdfResult {
+        void ok(File pdf);
+        void fail(String message);
+    }
+
+    private static class MailAccount {
+        String host, security, sender, username, password, fromName;
+        int port;
+    }
 
     public class AndroidBridge {
         @JavascriptInterface public void connect(String host, int port) { connectScale(host, port); }
@@ -468,6 +558,9 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String getMailSettings() { return readMailConfig().toString(); }
         @JavascriptInterface public boolean saveMailSettings(String json) { return saveMailConfig(json); }
         @JavascriptInterface public void testMail(String to) { sendTest(to); }
-        @JavascriptInterface public void sendMailPdf(String html, String to, String subject, String body, String fis) { renderPdfAndSend(html, to, subject, body, fis); }
+        @JavascriptInterface public void sendMailPdf(String html, String to, String subject, String body, String fis) {
+            renderPdfAndSend(html, to, subject, body, fis);
+        }
+        @JavascriptInterface public String appVersion() { return "2.10.4"; }
     }
 }
