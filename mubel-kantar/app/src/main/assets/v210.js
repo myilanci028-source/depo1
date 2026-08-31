@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const $=id=>document.getElementById(id);const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));const num=v=>{const n=parseFloat(String(v||0).replace(',','.'));return Number.isFinite(n)?n:0};
+const $=id=>document.getElementById(id);const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const num=v=>{const n=parseFloat(String(v||0).replace(',','.'));return Number.isFinite(n)?n:0};
 const DEFAULT_RECIPIENT='yilancioglu_merkez@yilancioglu.com.tr';
 const PRESETS={
   guzel:{host:'mt-compile.guzelhosting.com',port:'465',security:'ssl'},
