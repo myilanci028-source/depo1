@@ -5,11 +5,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.mubel.kantar.v2105'
+        applicationId 'com.mubel.kantar.v2106'
         minSdk 23
         targetSdk 35
-        versionCode 2105
-        versionName '2.10.5'
+        versionCode 2106
+        versionName '2.10.6'
     }
 
     packaging {
