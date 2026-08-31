@@ -1,8 +1,8 @@
-name: MUBEL KANTAR V2.10.3 PDF MAIL FIX
+name: MUBEL KANTAR V2.10.4 A4 MAIL PDF FIX
 
 on:
   push:
-    branches: [mubel-v2103-final]
+    branches: [mubel-v2104-final]
     paths:
       - 'mubel-v2103/project/**'
       - '.github/workflows/mubel-v2103-build.yml'
@@ -39,12 +39,12 @@ jobs:
           test -s "$APK"
           unzip -t "$APK"
           mkdir -p mubel-v2103/dist
-          cp "$APK" mubel-v2103/dist/MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX.apk
-          ls -lh mubel-v2103/dist/MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX.apk
+          cp "$APK" mubel-v2103/dist/MUBEL_KANTAR_v2.10.4_A4_MAIL_FIX.apk
+          ls -lh mubel-v2103/dist/MUBEL_KANTAR_v2.10.4_A4_MAIL_FIX.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX
-          path: mubel-v2103/dist/MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX.apk
+          name: MUBEL_KANTAR_v2.10.4_A4_MAIL_FIX
+          path: mubel-v2103/dist/MUBEL_KANTAR_v2.10.4_A4_MAIL_FIX.apk
           if-no-files-found: error
           retention-days: 30
