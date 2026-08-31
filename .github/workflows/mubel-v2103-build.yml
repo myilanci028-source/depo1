@@ -2,26 +2,18 @@ name: MUBEL KANTAR V2.10.3 PDF MAIL FIX
 
 on:
   push:
-    branches: [main]
+    branches: [mubel-v2103-final]
     paths:
-      - 'mubel-v2103/**'
+      - 'mubel-v2103/project/**'
       - '.github/workflows/mubel-v2103-build.yml'
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-
-      - name: Extract project source
-        run: |
-          rm -rf mubel-v2103/project
-          mkdir -p mubel-v2103/project
-          unzip -q mubel-v2103/source.zip -d mubel-v2103/project
 
       - uses: actions/setup-java@v4
         with:
@@ -30,34 +22,29 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      - name: Install Android SDK
+        run: yes | sdkmanager 'platforms;android-35' 'build-tools;35.0.0' >/dev/null
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
-      - name: Build debug APK
+      - name: Build APK
         working-directory: mubel-v2103/project
-        run: gradle :app:assembleDebug --stacktrace
+        run: gradle --no-daemon :app:assembleDebug --stacktrace
 
-      - name: Verify and stage APK
+      - name: Verify APK
         run: |
           APK='mubel-v2103/project/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
           unzip -t "$APK"
           mkdir -p mubel-v2103/dist
           cp "$APK" mubel-v2103/dist/MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX.apk
-          base64 -w0 "$APK" > mubel-v2103/dist/MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX.apk.b64
+          ls -lh mubel-v2103/dist/MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX
           path: mubel-v2103/dist/MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX.apk
           if-no-files-found: error
-
-      - name: Publish APK result
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add mubel-v2103/dist/MUBEL_KANTAR_v2.10.3_PDF_MAIL_FIX.apk.b64
-          git commit -m 'Publish MUBEL KANTAR v2.10.3 APK [skip ci]' || exit 0
-          git push
-
-# trigger 2026-08-31
+          retention-days: 30
