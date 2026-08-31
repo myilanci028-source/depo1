@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.mubel.kantar.v29'
+        applicationId 'com.mubel.kantar.v210'
         minSdk 23
         targetSdk 35
-        versionCode 290
-        versionName '2.9.0'
+        versionCode 2100
+        versionName '2.10.0'
     }
 
     buildTypes {
@@ -30,4 +30,6 @@ android {
 }
 
 dependencies {
+    implementation 'com.sun.mail:android-mail:1.6.7'
+    implementation 'com.sun.mail:android-activation:1.6.7'
 }
