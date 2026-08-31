@@ -1,4 +1,4 @@
-name: Build MUBEL KANTAR v2.10.2 APK
+name: Build MUBEL KANTAR v2.10.3 APK
 
 on:
   push:
@@ -48,6 +48,9 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Apply v2.10.3 fast PDF mail patch
+        working-directory: mubel-kantar
+        run: python patch_v2103.py
       - name: Build APK
         working-directory: mubel-kantar
         run: gradle --no-daemon --stacktrace assembleDebug
@@ -55,16 +58,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp mubel-kantar/app/build/outputs/apk/debug/app-debug.apk dist/MUBEL_KANTAR_v2.10.2_FINAL.apk
+          cp mubel-kantar/app/build/outputs/apk/debug/app-debug.apk dist/MUBEL_KANTAR_v2.10.3_FINAL.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist/MUBEL_KANTAR_v2.10.2_FINAL.apk
+          git add dist/MUBEL_KANTAR_v2.10.3_FINAL.apk
           if ! git diff --cached --quiet; then
-            git commit -m "Publish MUBEL KANTAR v2.10.2 FINAL APK [skip ci]"
+            git commit -m "Publish MUBEL KANTAR v2.10.3 FINAL APK [skip ci]"
             git push origin HEAD:mubel-kantar-v2-5-final
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: MUBEL_KANTAR_v2.10.2_FINAL
-          path: dist/MUBEL_KANTAR_v2.10.2_FINAL.apk
+          name: MUBEL_KANTAR_v2.10.3_FINAL
+          path: dist/MUBEL_KANTAR_v2.10.3_FINAL.apk
           retention-days: 30
