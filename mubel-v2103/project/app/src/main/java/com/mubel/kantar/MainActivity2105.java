@@ -35,8 +35,22 @@ public class MainActivity2105 extends MainActivity {
         transferWeb = findWebView(getWindow().getDecorView());
         if (transferWeb != null) {
             transferWeb.addJavascriptInterface(new TransferBridge(), "Transfer");
+            scheduleTransferUiInjection();
         }
         handleTransferIntent(getIntent());
+    }
+
+    private void scheduleTransferUiInjection() {
+        if (transferWeb == null) return;
+        Runnable inject = () -> {
+            if (transferWeb == null) return;
+            String script = "(function(){if(location.href.indexOf('index.html')>=0&&!document.getElementById('v2105loader')){var s=document.createElement('script');s.id='v2105loader';s.src='v2105.js';document.body.appendChild(s);}})();";
+            transferWeb.evaluateJavascript(script, null);
+        };
+        transferWeb.postDelayed(inject, 250);
+        transferWeb.postDelayed(inject, 750);
+        transferWeb.postDelayed(inject, 1500);
+        transferWeb.postDelayed(inject, 2600);
     }
 
     @Override
@@ -44,6 +58,7 @@ public class MainActivity2105 extends MainActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         handleTransferIntent(intent);
+        scheduleTransferUiInjection();
     }
 
     private WebView findWebView(View view) {
@@ -108,7 +123,6 @@ public class MainActivity2105 extends MainActivity {
             JSONObject o = new JSONObject(json);
             if (!"mubel-kantar-transfer".equals(o.optString("type"))) return;
             if (o.optInt("schema", 0) != 1) return;
-            // Güvenlik: yalnızca izin verilen alanlar JS tarafında uygulanır.
             pendingTransfer = o.toString();
         } catch (Exception ignored) {
         }
