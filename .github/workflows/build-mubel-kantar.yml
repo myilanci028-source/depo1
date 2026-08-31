@@ -50,7 +50,11 @@ jobs:
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Apply v2.10.3 fast PDF mail patch
         working-directory: mubel-kantar
-        run: python patch_v2103.py
+        shell: bash
+        run: |
+          python patch_v2103.py
+          sed -i "s/applicationId 'com.mubel.kantar.v2102'/applicationId 'com.mubel.kantar.v2103'/" app/build.gradle
+          grep -E "applicationId|versionCode|versionName" app/build.gradle
       - name: Build APK
         working-directory: mubel-kantar
         run: gradle --no-daemon --stacktrace assembleDebug
