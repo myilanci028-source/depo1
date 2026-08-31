@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 try {
                     view.evaluateJavascript(
-                            "(function(){document.querySelectorAll('.ver').forEach(function(e){e.textContent=e.textContent.replace(/v2\\.[0-9]+/g,'v2.10');});})();",
+                            "(function(){document.querySelectorAll('.ver').forEach(function(e){e.textContent=e.textContent.replace(/v2\\.[0-9]+(?:\\.[0-9]+)?/g,'v2.10.2');});if(!document.getElementById('v2102script')){var s=document.createElement('script');s.id='v2102script';s.src='v2102.js';document.body.appendChild(s);}})();",
                             null);
                 } catch (Exception ignored) {}
             }
@@ -150,7 +150,7 @@ public class MainActivity extends Activity {
                 SharedPreferences p = getSharedPreferences(PREF_MAIL, MODE_PRIVATE);
                 JSONObject o = new JSONObject();
                 o.put("provider", p.getString("provider", "guzel"));
-                o.put("host", p.getString("host", "mail.yilancioglu.com.tr"));
+                o.put("host", p.getString("host", "mt-compile.guzelhosting.com"));
                 o.put("port", p.getInt("port", 465));
                 o.put("security", p.getString("security", "ssl"));
                 o.put("sender", p.getString("sender", ""));
@@ -168,7 +168,11 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> createPdfAndSend(prepareHtmlForV210(html, "A4"), recipient, subject, body, fisNo));
         }
 
-        @JavascriptInterface public String appVersion() { return "2.10.0"; }
+        @JavascriptInterface public void testMail(String recipient) {
+            new Thread(() -> sendSmtpTest(recipient)).start();
+        }
+
+        @JavascriptInterface public String appVersion() { return "2.10.2"; }
     }
 
     private class TcpClient extends Thread {
@@ -239,9 +243,11 @@ public class MainActivity extends Activity {
     private String prepareHtmlForV210(String html, String mode) {
         if (html == null) return "";
         String out = html
-                .replace("MUBEL KANTAR v2.7", "MUBEL KANTAR v2.10")
-                .replace("MUBEL KANTAR v2.8", "MUBEL KANTAR v2.10")
-                .replace("MUBEL KANTAR v2.9", "MUBEL KANTAR v2.10");
+                .replace("MUBEL KANTAR v2.7", "MUBEL KANTAR v2.10.2")
+                .replace("MUBEL KANTAR v2.8", "MUBEL KANTAR v2.10.2")
+                .replace("MUBEL KANTAR v2.9", "MUBEL KANTAR v2.10.2")
+                .replace("MUBEL KANTAR v2.10", "MUBEL KANTAR v2.10.2")
+                .replace("MUBEL KANTAR v2.10.1", "MUBEL KANTAR v2.10.2");
         if (mode != null && mode.startsWith("70")) return out;
 
         final String phone = "0530 962 67 93";
@@ -316,22 +322,42 @@ public class MainActivity extends Activity {
                         document.close();
                         document = null;
 
-                        cleanupPrintView(pv, 800);
+                        cleanupPrintView(pv, 600);
                         new Thread(() -> sendSmtp(pdf, recipient, subject, body, safeFis)).start();
                     } catch (Exception e) {
                         try { if (document != null) document.close(); } catch (Exception ignored) {}
-                        cleanupPrintView(pv, 300);
+                        cleanupPrintView(pv, 250);
                         mailError("PDF hazırlanamadı: " + e.getMessage());
                     }
-                }, 450);
+                }, 220);
             }
         });
         pv.loadDataWithBaseURL("https://mubel.local/", html, "text/html", "UTF-8", null);
     }
 
+    private Properties smtpProperties(String host, int port, String security) {
+        Properties props = new Properties();
+        props.put("mail.smtp.host", host);
+        props.put("mail.smtp.port", String.valueOf(port));
+        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.connectiontimeout", "10000");
+        props.put("mail.smtp.timeout", "18000");
+        props.put("mail.smtp.writetimeout", "18000");
+        if ("ssl".equalsIgnoreCase(security)) {
+            props.put("mail.smtp.ssl.enable", "true");
+            props.put("mail.smtp.socketFactory.port", String.valueOf(port));
+            props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+            props.put("mail.smtp.socketFactory.fallback", "false");
+        } else if ("starttls".equalsIgnoreCase(security)) {
+            props.put("mail.smtp.starttls.enable", "true");
+            props.put("mail.smtp.starttls.required", "true");
+        }
+        return props;
+    }
+
     private void sendSmtp(File pdf, String recipient, String subject, String body, String safeFis) {
         SharedPreferences p = getSharedPreferences(PREF_MAIL, MODE_PRIVATE);
-        String host = p.getString("host", "mail.yilancioglu.com.tr");
+        String host = p.getString("host", "mt-compile.guzelhosting.com");
         int port = p.getInt("port", 465);
         String security = p.getString("security", "ssl");
         String sender = p.getString("sender", "");
@@ -345,24 +371,7 @@ public class MainActivity extends Activity {
         }
 
         try {
-            Properties props = new Properties();
-            props.put("mail.smtp.host", host);
-            props.put("mail.smtp.port", String.valueOf(port));
-            props.put("mail.smtp.auth", "true");
-            props.put("mail.smtp.connectiontimeout", "15000");
-            props.put("mail.smtp.timeout", "25000");
-            props.put("mail.smtp.writetimeout", "25000");
-            if ("ssl".equalsIgnoreCase(security)) {
-                props.put("mail.smtp.ssl.enable", "true");
-                props.put("mail.smtp.socketFactory.port", String.valueOf(port));
-                props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-                props.put("mail.smtp.socketFactory.fallback", "false");
-            } else if ("starttls".equalsIgnoreCase(security)) {
-                props.put("mail.smtp.starttls.enable", "true");
-                props.put("mail.smtp.starttls.required", "true");
-            }
-
-            Session session = Session.getInstance(props, new Authenticator() {
+            Session session = Session.getInstance(smtpProperties(host, port, security), new Authenticator() {
                 @Override protected PasswordAuthentication getPasswordAuthentication() {
                     return new PasswordAuthentication(username, password);
                 }
@@ -388,9 +397,43 @@ public class MainActivity extends Activity {
             Transport.send(message);
 
             try { pdf.delete(); } catch (Exception ignored) {}
-            js("window.MUBEL_MAIL_STATUS&&window.MUBEL_MAIL_STATUS('OK','PDF kantar fişi başarıyla " + escapeJsText(recipient) + " adresine gönderildi.');");
+            js("window.MUBEL_MAIL_STATUS&&window.MUBEL_MAIL_STATUS('OK','PDF kantar fişi SMTP sunucusu tarafından kabul edildi. Alıcı: " + escapeJsText(recipient) + "');");
         } catch (Exception e) {
             mailError("Mail gönderilemedi: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+        }
+    }
+
+    private void sendSmtpTest(String recipient) {
+        SharedPreferences p = getSharedPreferences(PREF_MAIL, MODE_PRIVATE);
+        String host = p.getString("host", "mt-compile.guzelhosting.com");
+        int port = p.getInt("port", 465);
+        String security = p.getString("security", "ssl");
+        String sender = p.getString("sender", "");
+        String username = p.getString("username", "");
+        String password = p.getString("password", "");
+        String fromName = p.getString("fromName", "YILANCIOĞLU KANTAR");
+        String to = (recipient == null || !recipient.contains("@")) ? p.getString("defaultRecipient", DEFAULT_RECIPIENT) : recipient;
+
+        if (host.isEmpty() || sender.isEmpty() || username.isEmpty() || password.isEmpty()) {
+            mailTestError("SMTP sunucu, gönderen e-posta, kullanıcı adı veya şifre eksik.");
+            return;
+        }
+        try {
+            Session session = Session.getInstance(smtpProperties(host, port, security), new Authenticator() {
+                @Override protected PasswordAuthentication getPasswordAuthentication() {
+                    return new PasswordAuthentication(username, password);
+                }
+            });
+            MimeMessage message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(sender, fromName, "UTF-8"));
+            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to, false));
+            message.setSubject("MUBEL KANTAR - SMTP TEST", "UTF-8");
+            message.setText("Merhaba;\n\nBu mesaj MUBEL KANTAR e-posta ayarlarının test mesajıdır.\nSMTP: " + host + ":" + port + " / " + security.toUpperCase() + "\n\nTest başarılıdır.", "UTF-8");
+            message.saveChanges();
+            Transport.send(message);
+            js("window.MUBEL_MAIL_TEST_STATUS&&window.MUBEL_MAIL_TEST_STATUS('OK','Test maili SMTP sunucusu tarafından kabul edildi. Alıcı: " + escapeJsText(to) + " · Sunucu: " + escapeJsText(host) + ":" + port + "');");
+        } catch (Exception e) {
+            mailTestError("Test maili gönderilemedi: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
     }
 
@@ -406,6 +449,10 @@ public class MainActivity extends Activity {
 
     private void mailError(String message) {
         js("window.MUBEL_MAIL_STATUS&&window.MUBEL_MAIL_STATUS('HATA'," + q(message) + ");");
+    }
+
+    private void mailTestError(String message) {
+        js("window.MUBEL_MAIL_TEST_STATUS&&window.MUBEL_MAIL_TEST_STATUS('HATA'," + q(message) + ");");
     }
 
     private void cleanupPrintView(WebView pv, long delay) {
