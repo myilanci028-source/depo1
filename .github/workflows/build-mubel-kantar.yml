@@ -1,11 +1,6 @@
-name: Build MUBEL KANTAR v2.10 APK
+name: Build MUBEL KANTAR v2.10.1 APK
 
 on:
-  push:
-    branches: [mubel-kantar-v2-5-final]
-    paths:
-      - 'mubel-kantar/**'
-      - '.github/workflows/build-mubel-kantar.yml'
   workflow_dispatch:
 
 permissions:
@@ -36,16 +31,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp mubel-kantar/app/build/outputs/apk/debug/app-debug.apk dist/MUBEL_KANTAR_v2.10_FINAL.apk
+          cp mubel-kantar/app/build/outputs/apk/debug/app-debug.apk dist/MUBEL_KANTAR_v2.10.1_FINAL.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist/MUBEL_KANTAR_v2.10_FINAL.apk
+          git add dist/MUBEL_KANTAR_v2.10.1_FINAL.apk
           if ! git diff --cached --quiet; then
-            git commit -m "Publish MUBEL KANTAR v2.10 FINAL APK [skip ci]"
+            git commit -m "Publish MUBEL KANTAR v2.10.1 FINAL APK [skip ci]"
             git push origin HEAD:mubel-kantar-v2-5-final
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: MUBEL_KANTAR_v2.10_FINAL
-          path: dist/MUBEL_KANTAR_v2.10_FINAL.apk
+          name: MUBEL_KANTAR_v2.10.1_FINAL
+          path: dist/MUBEL_KANTAR_v2.10.1_FINAL.apk
           retention-days: 30
