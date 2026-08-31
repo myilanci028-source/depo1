@@ -8,14 +8,49 @@
         android:theme="@style/AppTheme"
         android:label="MUBEL KANTAR"
         android:icon="@drawable/ic_launcher">
+
+        <provider
+            android:name=".TransferProvider"
+            android:authorities="${applicationId}.transfer"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <activity
-            android:name=".MainActivity"
+            android:name=".MainActivity2105"
             android:screenOrientation="unspecified"
             android:configChanges="orientation|screenSize|keyboardHidden"
+            android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="mubelkantar" android:host="aktar" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/vnd.mubel.kantar-transfer" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.mubel.kantar-transfer" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" android:mimeType="application/octet-stream" android:pathPattern=".*\.mubel" />
             </intent-filter>
         </activity>
     </application>
