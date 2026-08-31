@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MUBEL KANTAR</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+<section id="login" class="card login">
+  <div class="brand">MUBEL <b>KANTAR</b></div>
+  <div class="ver">v2.10.3</div>
+  <div class="field"><label>Giriş tipi</label><select id="role"><option value="normal">Normal Kullanıcı</option><option value="admin">Yönetici</option></select></div>
+  <div class="field"><label>Kullanıcı</label><input id="lu" value="kantar" autocomplete="username"></div>
+  <div class="field"><label>Şifre</label><input id="lp" type="password" value="" autocomplete="current-password"></div>
+  <button id="loginBtn" class="btn orange" style="width:100%">GİRİŞ YAP</button>
+</section>
+<section id="main" class="hidden">
+<div class="top"><div><div class="brand">MUBEL <b>KANTAR</b></div><div class="ver">v2.10.3 · Android</div></div><button class="btn" onclick="location.reload()">Çıkış</button></div>
+<div class="nav"><button class="btn active" data-tab="home">Kantar</button><button class="btn" data-tab="records">Kayıtlar</button><button id="settingsBtn" class="btn" data-tab="settings">Ayarlar</button><button id="diagBtn" class="btn" data-tab="diag">Teşhis</button></div>
+<div id="tab-home">
+<div class="card status"><div class="grow"><b><span id="dot" class="bad">●</span> <span id="status">BAĞLANTI KAPALI</span></b><div id="detail" class="muted"></div></div><select id="profile" class="grow"><option value="densi">DENSİ Wi‑Fi 10.10.100.254:8899</option><option value="custom">Özel IP / Port</option></select><button id="connect" class="btn orange">BAĞLAN</button><button id="cut" class="btn">KES</button></div>
+<div id="custom" class="card hidden"><div class="grid2"><div><label>IP</label><input id="host" value="10.10.100.254"></div><div><label>Port</label><input id="port" type="number" value="8899"></div></div></div>
+<div class="weight"><div class="muted">CANLI AĞIRLIK</div><div><span id="live" class="n">0</span> <span class="kg">kg</span></div><div id="stable" class="stable warn">VERİ BEKLENİYOR</div><div id="frameInfo" class="muted"></div></div>
+<div class="actions"><button id="toBrut" class="btn green">CANLI → BRÜT</button><button id="toDara" class="btn green">CANLI → DARA</button><button id="a4" class="btn orange">A4 YATAY PDF / YAZDIR</button><button id="mm70" class="btn">70 mm DİKEY PDF / YAZDIR</button></div>
+<div class="card"><h3>Tartım Bilgileri</h3>
+  <div class="grid2">
+    <div class="field"><label>Fiş No</label><input id="fis"></div><div class="field"><label>Tarih / Saat</label><input id="tarih"></div>
+    <div class="field"><label>Cari / Firma</label><input id="cari"></div><div class="field"><label>Malzeme / Ürün</label><input id="urun" value="DEMİR"></div>
+    <div class="field"><label>Araç Plaka</label><input id="plaka"></div><div class="field"><label>İrsaliye / Belge No</label><input id="irsaliye"></div>
+    <div class="field"><label>Geldiği Yer</label><input id="geldigi" list="geldigiList" placeholder="Örn. Şebinkarahisar Depo"><datalist id="geldigiList"></datalist></div>
+    <div class="field"><label>Gideceği Yer</label><input id="gidecegi" list="gidecegiList" placeholder="Örn. Giresun Şantiye"><datalist id="gidecegiList"></datalist></div>
+  </div>
+  <div class="grid3"><div class="field"><label>Brüt kg</label><input id="brut" value="0"></div><div class="field"><label>Dara kg</label><input id="dara" value="0"></div><div class="field"><label>Net kg</label><input id="net" value="0" readonly></div></div>
+  <div class="field"><label>Operatör</label><input id="operator"></div><div class="field"><label>Açıklama</label><textarea id="aciklama"></textarea></div>
+  <div class="row"><button id="save" class="btn orange">TARTIMI KAYDET</button><button id="new" class="btn">YENİ TARTIM</button></div>
+</div>
+</div>
+<div id="tab-records" class="hidden"><div class="card"><h3>Tartım Kayıtları</h3><input id="search" placeholder="Tarih, fiş, plaka, cari, ürün, geldiği/gideceği yer ara"><div style="overflow:auto"><table><thead><tr><th>Tarih</th><th>Fiş</th><th>Plaka</th><th>Cari</th><th>Ürün</th><th>Geldiği</th><th>Gideceği</th><th>Net</th><th style="text-align:right">İşlem</th></tr></thead><tbody id="tbody"></tbody></table></div></div></div>
+<div id="tab-settings" class="hidden">
+  <div class="card"><h3>Kurumsal Ayarlar</h3><div class="grid2"><div class="field"><label>Firma Ünvanı</label><input id="firma"></div><div class="field"><label>Telefon</label><input id="telefon"></div><div class="field"><label>Web</label><input id="web"></div><div class="field"><label>Vergi / VKN</label><input id="vergi"></div></div><div class="field"><label>Adres</label><textarea id="adres"></textarea></div><div class="field"><label>PDF Alt Bilgi</label><input id="footer"></div><div class="row"><img id="logo" class="logo hidden"><button id="pickLogo" class="btn orange">LOGO YÜKLE</button><button id="delLogo" class="btn red">LOGOYU KALDIR</button></div></div>
+  <div class="card"><h3>Kantar / Protokol Ayarları</h3><div class="grid2"><div class="field"><label>Canlı kilo çarpanı</label><input id="factor" type="number" step="0.001"></div><div class="field"><label>Ondalık basamak</label><select id="decimals"><option>0</option><option>1</option><option>2</option><option>3</option></select></div><div class="field"><label>Stabil toleransı (kg)</label><input id="tol" type="number" step="0.1"></div><div class="field"><label>Otomatik bağlantı</label><select id="auto"><option value="1">Açık</option><option value="0">Kapalı</option></select></div></div><p class="muted">Çalışan v2.3 canlı kilo çözümleyicisi korunmuştur. Varsayılan canlı kilo çarpanı 0,1'dir.</p></div>
+  <div class="card"><h3>Kullanıcılar</h3><div class="grid2"><div class="field"><label>Admin kullanıcı</label><input id="au"></div><div class="field"><label>Yeni admin şifre</label><input id="apNew" type="password" placeholder="Değiştirmeyeceksen boş bırak"></div><div class="field"><label>Normal kullanıcı</label><input id="nu"></div><div class="field"><label>Yeni normal şifre</label><input id="npNew" type="password" placeholder="Değiştirmeyeceksen boş bırak"></div></div><div class="securityNote">Mevcut şifreler güvenlik için ekranda gösterilmez. Yeni şifre yalnızca bu alanlara yazılırsa değiştirilir.</div><button id="saveCfg" class="btn orange" style="margin-top:12px">AYARLARI KAYDET</button></div>
+</div>
+<div id="tab-diag" class="hidden"><div class="card"><h3>Canlı Ham Veri / Teşhis</h3><div id="decoded" class="pill">Çözülen: -</div><div id="raw" class="raw"></div><div class="row"><button id="clearRaw" class="btn">Ham Veriyi Temizle</button><span id="bytes" class="pill">0 byte</span></div></div></div>
+</section></div>
+<div id="printModal" class="modal hidden"><div class="modalCard"><h3>Kayıttan Çıktı Al</h3><div id="printModalInfo" class="muted"></div><div class="modalActions"><button id="recordA4" class="btn orange">A4 YATAY PDF / YAZDIR</button><button id="record70" class="btn">70 mm DİKEY PDF / YAZDIR</button><button id="recordOpen" class="btn">KAYDI AÇ</button><button id="recordDelete" class="btn red">KAYDI SİL</button><button id="recordCancel" class="btn">VAZGEÇ</button></div></div></div>
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+<script src="printfix.js"></script>
+<script src="v210.js"></script>
+<script src="v2102.js"></script>
+</body>
+</html>
