@@ -243,11 +243,11 @@ public class MainActivity extends Activity {
     private String prepareHtmlForV210(String html, String mode) {
         if (html == null) return "";
         String out = html
-                .replace("MUBEL KANTAR v2.7", "MUBEL KANTAR v2.10.2")
-                .replace("MUBEL KANTAR v2.8", "MUBEL KANTAR v2.10.2")
-                .replace("MUBEL KANTAR v2.9", "MUBEL KANTAR v2.10.2")
+                .replace("MUBEL KANTAR v2.10.1", "MUBEL KANTAR v2.10.2")
                 .replace("MUBEL KANTAR v2.10", "MUBEL KANTAR v2.10.2")
-                .replace("MUBEL KANTAR v2.10.1", "MUBEL KANTAR v2.10.2");
+                .replace("MUBEL KANTAR v2.9", "MUBEL KANTAR v2.10.2")
+                .replace("MUBEL KANTAR v2.8", "MUBEL KANTAR v2.10.2")
+                .replace("MUBEL KANTAR v2.7", "MUBEL KANTAR v2.10.2");
         if (mode != null && mode.startsWith("70")) return out;
 
         final String phone = "0530 962 67 93";
