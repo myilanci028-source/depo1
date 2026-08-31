@@ -1,6 +1,11 @@
 name: Build MUBEL KANTAR v2.10.1 APK
 
 on:
+  push:
+    branches: [mubel-kantar-v2-5-final]
+    paths:
+      - 'mubel-kantar/**'
+      - '.github/workflows/build-mubel-kantar.yml'
   workflow_dispatch:
 
 permissions:
