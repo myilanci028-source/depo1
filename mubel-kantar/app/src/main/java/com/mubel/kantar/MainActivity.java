@@ -5,16 +5,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.CancellationSignal;
-import android.os.ParcelFileDescriptor;
-import android.print.PageRange;
 import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
-import android.print.PrintDocumentInfo;
 import android.print.PrintManager;
 import android.util.Base64;
+import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -25,6 +23,7 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -49,6 +48,8 @@ public class MainActivity extends Activity {
     private static final int PICK_LOGO = 501;
     private static final String PREF_MAIL = "mubel_mail_v210";
     private static final String DEFAULT_RECIPIENT = "yilancioglu_merkez@yilancioglu.com.tr";
+    private static final int PDF_W = 1684;
+    private static final int PDF_H = 1191;
     private WebView web;
     private final List<WebView> printViews = new ArrayList<>();
     private TcpClient tcpClient;
@@ -171,14 +172,21 @@ public class MainActivity extends Activity {
     }
 
     private class TcpClient extends Thread {
-        private final String host; private final int port;
+        private final String host;
+        private final int port;
         private final AtomicBoolean running = new AtomicBoolean(true);
         private Socket socket;
-        TcpClient(String host, int port) { this.host = host; this.port = port; }
+
+        TcpClient(String host, int port) {
+            this.host = host;
+            this.port = port;
+        }
+
         void stopClient() {
             running.set(false);
             try { if (socket != null) socket.close(); } catch (Exception ignored) {}
         }
+
         @Override public void run() {
             try {
                 js("window.MUBEL&&window.MUBEL.nativeStatus('BAĞLANIYOR'," + q(host + ":" + port) + ");");
@@ -201,7 +209,9 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception e) {
                 js("window.MUBEL&&window.MUBEL.nativeStatus('HATA'," + q(e.getClass().getSimpleName() + ": " + e.getMessage()) + ");");
-            } finally { stopClient(); }
+            } finally {
+                stopClient();
+            }
         }
     }
 
@@ -212,7 +222,8 @@ public class MainActivity extends Activity {
             try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Exception ignored) {}
             try (InputStream in = getContentResolver().openInputStream(uri); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                 if (in == null) throw new Exception("Dosya açılamadı");
-                byte[] buf = new byte[8192]; int n;
+                byte[] buf = new byte[8192];
+                int n;
                 while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
                 byte[] bytes = out.toByteArray();
                 String type = getContentResolver().getType(uri);
@@ -256,77 +267,63 @@ public class MainActivity extends Activity {
         return out;
     }
 
-    private PrintAttributes a4Attributes() {
-        return new PrintAttributes.Builder()
-                .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
-                .setResolution(new PrintAttributes.Resolution("mubel", "MUBEL", 300, 300))
-                .setMediaSize(PrintAttributes.MediaSize.ISO_A4.asLandscape())
-                .setMinMargins(new PrintAttributes.Margins(250,250,250,250))
-                .build();
-    }
-
     private void createPdfAndSend(String html, String recipient, String subject, String body, String fisNo) {
         if (recipient == null || !recipient.contains("@")) {
-            js("window.MUBEL_MAIL_STATUS&&window.MUBEL_MAIL_STATUS('HATA','Geçerli alıcı e-posta adresi giriniz.');");
+            mailError("Geçerli alıcı e-posta adresi giriniz.");
             return;
         }
+
         final WebView pv = new WebView(this);
         printViews.add(pv);
+        pv.setBackgroundColor(Color.WHITE);
+        pv.setVerticalScrollBarEnabled(false);
+        pv.setHorizontalScrollBarEnabled(false);
         WebSettings ps = pv.getSettings();
         ps.setJavaScriptEnabled(false);
         ps.setDefaultTextEncodingName("UTF-8");
+        ps.setLoadWithOverviewMode(true);
+        ps.setUseWideViewPort(true);
+
         pv.setWebViewClient(new WebViewClient() {
             private boolean done = false;
+
             @Override public void onPageFinished(WebView view, String url) {
                 if (done) return;
                 done = true;
-                try {
-                    File dir = new File(getCacheDir(), "mailpdf");
-                    if (!dir.exists()) dir.mkdirs();
-                    String safeFis = sanitizeFileName(fisNo == null ? "kantar" : fisNo);
-                    File pdf = new File(dir, "MUBEL_KANTAR_" + safeFis + "_" + System.currentTimeMillis() + ".pdf");
-                    PrintDocumentAdapter adapter = pv.createPrintDocumentAdapter("MUBEL KANTAR A4");
-                    PrintAttributes attrs = a4Attributes();
-                    adapter.onLayout(null, attrs, new CancellationSignal(), new PrintDocumentAdapter.LayoutResultCallback() {
-                        @Override public void onLayoutFinished(PrintDocumentInfo info, boolean changed) {
-                            try {
-                                ParcelFileDescriptor pfd = ParcelFileDescriptor.open(pdf,
-                                        ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_TRUNCATE | ParcelFileDescriptor.MODE_READ_WRITE);
-                                adapter.onWrite(new PageRange[]{PageRange.ALL_PAGES}, pfd, new CancellationSignal(), new PrintDocumentAdapter.WriteResultCallback() {
-                                    @Override public void onWriteFinished(PageRange[] pages) {
-                                        try { pfd.close(); } catch (Exception ignored) {}
-                                        cleanupPrintView(pv, 1500);
-                                        new Thread(() -> sendSmtp(pdf, recipient, subject, body, safeFis)).start();
-                                    }
-                                    @Override public void onWriteFailed(CharSequence error) {
-                                        try { pfd.close(); } catch (Exception ignored) {}
-                                        cleanupPrintView(pv, 500);
-                                        mailError("PDF oluşturulamadı: " + (error == null ? "bilinmeyen hata" : error));
-                                    }
-                                    @Override public void onWriteCancelled() {
-                                        try { pfd.close(); } catch (Exception ignored) {}
-                                        cleanupPrintView(pv, 500);
-                                        mailError("PDF oluşturma iptal edildi.");
-                                    }
-                                });
-                            } catch (Exception e) {
-                                cleanupPrintView(pv, 500);
-                                mailError("PDF dosyası açılamadı: " + e.getMessage());
-                            }
+                pv.postDelayed(() -> {
+                    PdfDocument document = null;
+                    try {
+                        File dir = new File(getCacheDir(), "mailpdf");
+                        if (!dir.exists() && !dir.mkdirs()) throw new Exception("PDF klasörü oluşturulamadı");
+                        String safeFis = sanitizeFileName(fisNo == null ? "kantar" : fisNo);
+                        File pdf = new File(dir, "MUBEL_KANTAR_" + safeFis + "_" + System.currentTimeMillis() + ".pdf");
+
+                        int wSpec = View.MeasureSpec.makeMeasureSpec(PDF_W, View.MeasureSpec.EXACTLY);
+                        int hSpec = View.MeasureSpec.makeMeasureSpec(PDF_H, View.MeasureSpec.EXACTLY);
+                        pv.measure(wSpec, hSpec);
+                        pv.layout(0, 0, PDF_W, PDF_H);
+
+                        document = new PdfDocument();
+                        PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(PDF_W, PDF_H, 1).create();
+                        PdfDocument.Page page = document.startPage(pageInfo);
+                        page.getCanvas().drawColor(Color.WHITE);
+                        pv.draw(page.getCanvas());
+                        document.finishPage(page);
+
+                        try (FileOutputStream out = new FileOutputStream(pdf)) {
+                            document.writeTo(out);
                         }
-                        @Override public void onLayoutFailed(CharSequence error) {
-                            cleanupPrintView(pv, 500);
-                            mailError("PDF yerleşimi hazırlanamadı: " + (error == null ? "bilinmeyen hata" : error));
-                        }
-                        @Override public void onLayoutCancelled() {
-                            cleanupPrintView(pv, 500);
-                            mailError("PDF hazırlama iptal edildi.");
-                        }
-                    }, null);
-                } catch (Exception e) {
-                    cleanupPrintView(pv, 500);
-                    mailError("PDF hazırlanamadı: " + e.getMessage());
-                }
+                        document.close();
+                        document = null;
+
+                        cleanupPrintView(pv, 800);
+                        new Thread(() -> sendSmtp(pdf, recipient, subject, body, safeFis)).start();
+                    } catch (Exception e) {
+                        try { if (document != null) document.close(); } catch (Exception ignored) {}
+                        cleanupPrintView(pv, 300);
+                        mailError("PDF hazırlanamadı: " + e.getMessage());
+                    }
+                }, 450);
             }
         });
         pv.loadDataWithBaseURL("https://mubel.local/", html, "text/html", "UTF-8", null);
@@ -382,7 +379,6 @@ public class MainActivity extends Activity {
             MimeBodyPart pdfPart = new MimeBodyPart();
             pdfPart.attachFile(pdf);
             pdfPart.setFileName(MimeUtility.encodeText("Kantar_Fisi_" + safeFis + ".pdf", "UTF-8", null));
-            pdfPart.setHeader("Content-Type", "application/pdf; name=\"Kantar_Fisi_" + safeFis + ".pdf\"");
 
             Multipart multipart = new MimeMultipart();
             multipart.addBodyPart(textPart);
@@ -427,6 +423,7 @@ public class MainActivity extends Activity {
         ps.setDefaultTextEncodingName("UTF-8");
         pv.setWebViewClient(new WebViewClient() {
             private boolean done = false;
+
             @Override public void onPageFinished(WebView view, String url) {
                 if (done) return;
                 done = true;
@@ -461,7 +458,10 @@ public class MainActivity extends Activity {
     @Override protected void onDestroy() {
         if (tcpClient != null) tcpClient.stopClient();
         if (web != null) web.destroy();
-        for (WebView v : printViews) { try { v.destroy(); } catch (Exception ignored) {} }
-        printViews.clear(); super.onDestroy();
+        for (WebView v : printViews) {
+            try { v.destroy(); } catch (Exception ignored) {}
+        }
+        printViews.clear();
+        super.onDestroy();
     }
 }
