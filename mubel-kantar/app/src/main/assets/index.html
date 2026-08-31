@@ -10,17 +10,17 @@
 <div id="app">
 <section id="login" class="card login">
   <div class="brand">MUBEL <b>KANTAR</b></div>
-  <div class="ver">v2.9</div>
+  <div class="ver">v2.10</div>
   <div class="field"><label>Giriş tipi</label><select id="role"><option value="normal">Normal Kullanıcı</option><option value="admin">Yönetici</option></select></div>
   <div class="field"><label>Kullanıcı</label><input id="lu" value="kantar" autocomplete="username"></div>
   <div class="field"><label>Şifre</label><input id="lp" type="password" value="" autocomplete="current-password"></div>
   <button id="loginBtn" class="btn orange" style="width:100%">GİRİŞ YAP</button>
 </section>
 <section id="main" class="hidden">
-<div class="top"><div><div class="brand">MUBEL <b>KANTAR</b></div><div class="ver">v2.9 · Android</div></div><button class="btn" onclick="location.reload()">Çıkış</button></div>
+<div class="top"><div><div class="brand">MUBEL <b>KANTAR</b></div><div class="ver">v2.10 · Android</div></div><button class="btn" onclick="location.reload()">Çıkış</button></div>
 <div class="nav"><button class="btn active" data-tab="home">Kantar</button><button class="btn" data-tab="records">Kayıtlar</button><button id="settingsBtn" class="btn" data-tab="settings">Ayarlar</button><button id="diagBtn" class="btn" data-tab="diag">Teşhis</button></div>
 <div id="tab-home">
-<div class="card status"><div class="grow"><b><span id="dot" class="bad">●</span> <span id="status">BAĞLANTI KAPALI</span></b><div id="detail" class="muted"></div></div><select id="profile" class="grow"><option value="densi">DENSİ Wi‑Fi 10.10.100.254:8899</option><option value="lan">İç Ağ 192.168.1.13:9550</option><option value="wan">Dış Ağ 88.248.188.243:9546</option><option value="custom">Özel IP / Port</option></select><button id="connect" class="btn orange">BAĞLAN</button><button id="cut" class="btn">KES</button></div>
+<div class="card status"><div class="grow"><b><span id="dot" class="bad">●</span> <span id="status">BAĞLANTI KAPALI</span></b><div id="detail" class="muted"></div></div><select id="profile" class="grow"><option value="densi">DENSİ Wi‑Fi 10.10.100.254:8899</option><option value="custom">Özel IP / Port</option></select><button id="connect" class="btn orange">BAĞLAN</button><button id="cut" class="btn">KES</button></div>
 <div id="custom" class="card hidden"><div class="grid2"><div><label>IP</label><input id="host" value="10.10.100.254"></div><div><label>Port</label><input id="port" type="number" value="8899"></div></div></div>
 <div class="weight"><div class="muted">CANLI AĞIRLIK</div><div><span id="live" class="n">0</span> <span class="kg">kg</span></div><div id="stable" class="stable warn">VERİ BEKLENİYOR</div><div id="frameInfo" class="muted"></div></div>
 <div class="actions"><button id="toBrut" class="btn green">CANLI → BRÜT</button><button id="toDara" class="btn green">CANLI → DARA</button><button id="a4" class="btn orange">A4 YATAY PDF / YAZDIR</button><button id="mm70" class="btn">70 mm DİKEY PDF / YAZDIR</button></div>
@@ -49,5 +49,6 @@
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>
 <script src="printfix.js"></script>
+<script src="v210.js"></script>
 </body>
 </html>
