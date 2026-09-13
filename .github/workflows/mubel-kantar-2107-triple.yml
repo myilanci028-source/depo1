@@ -76,6 +76,24 @@ jobs:
           grep -n "applicationId\|versionCode\|versionName" mubel-kantar-stable-triple/project/app/build.gradle
           grep -n "TRANSMIT_IR\|BLUETOOTH_SCAN\|BLUETOOTH_CONNECT" mubel-kantar-stable-triple/project/app/src/main/AndroidManifest.xml
 
+          # Build-only packaging fix: JavaMail + Activation ship duplicate META-INF license files.
+          # This does not touch the verified MUBEL KANTAR 2.10.6 web/UI assets or runtime logic.
+          cat >> mubel-kantar-stable-triple/project/app/build.gradle <<'EOF'
+
+          android {
+              packaging {
+                  resources {
+                      excludes += [
+                          'META-INF/LICENSE.md',
+                          'META-INF/LICENSE.txt',
+                          'META-INF/NOTICE.md',
+                          'META-INF/NOTICE.txt'
+                      ]
+                  }
+              }
+          }
+          EOF
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
