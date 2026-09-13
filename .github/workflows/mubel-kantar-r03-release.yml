@@ -1,43 +1,28 @@
-name: MUBEL KANTAR UNIVERSAL 2.10.8-R03 APK
+name: MUBEL KANTAR UNIVERSAL 2.10.9-R04 APK
 
 on:
   push:
-    branches: [mubel-kantar-r03-release]
-    paths:
-      - 'mubel-kantar-r03/**'
-      - '.github/workflows/mubel-kantar-r03-release.yml'
+    branches: [mubel-kantar-r04-release]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  build-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
-      - name: Rebuild and verify R03 source archive
+      - name: Extract R04 source
         shell: bash
         run: |
-          echo 'd20234c6f904750872106ab40f7266d0a49449fe16ddb02848c97720ddd6b70b  mubel-kantar-r03/source.part00' | sha256sum -c -
-          echo '4e9012905fb8a36c4bdd831d4c73149d71059d2663c223537fa9387534363dd1  mubel-kantar-r03/source.part01' | sha256sum -c -
-          echo 'd28d28bc0adccd5508dc140615321c69e0c6e42f2a77a088deaafbb3f461a42e  mubel-kantar-r03/source.part02' | sha256sum -c -
-          echo '395b42f3eda1f39d231e16750134809f1e090e33834932a6e7e448f8f63bc239  mubel-kantar-r03/source.part03a' | sha256sum -c -
-          echo '895c64e17321d0c8e6ad0511bb12b0d8a3d4d33398cc12fbe127181d3b85e3a6  mubel-kantar-r03/source.part03b' | sha256sum -c -
-          echo '5ff2720ff86a852e26f925f18e5a37a53644973329afcec0aee7b968e4a760af  mubel-kantar-r03/source.part04' | sha256sum -c -
-          cat mubel-kantar-r03/source.part00 mubel-kantar-r03/source.part01 mubel-kantar-r03/source.part02 mubel-kantar-r03/source.part03a mubel-kantar-r03/source.part03b mubel-kantar-r03/source.part04 > /tmp/mubel-r03.b64
-          echo '53da8ad3769647a1415801cca7b6daeb1753248d120120c0cb810d2a4fffd9cd  /tmp/mubel-r03.b64' | sha256sum -c -
-          base64 -d /tmp/mubel-r03.b64 > /tmp/mubel-r03.tar.xz
-          echo '4823fc53c933ba566ce3cf2bdd34e32db0a04f21cce8ff1040a42d5efc5e2d0a  /tmp/mubel-r03.tar.xz' | sha256sum -c -
-          xz -t /tmp/mubel-r03.tar.xz
-          rm -rf mubel-kantar-r03/project /tmp/mubel-r03-src
-          mkdir -p mubel-kantar-r03/project /tmp/mubel-r03-src
-          tar -xJf /tmp/mubel-r03.tar.xz -C /tmp/mubel-r03-src
-          cp -a /tmp/mubel-r03-src/MUBEL_Kantar_Android_R03/. mubel-kantar-r03/project/
-          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\nandroid.suppressUnsupportedCompileSdk=36\n' > mubel-kantar-r03/project/gradle.properties
-          grep -n "applicationId\|versionCode\|versionName" mubel-kantar-r03/project/app/build.gradle
+          rm -rf mubel-kantar-r04/project
+          mkdir -p mubel-kantar-r04/project
+          tar -xzf mubel-kantar-r04/source.tar.gz -C /tmp
+          cp -a /tmp/MUBEL_Kantar_Android_R04/. mubel-kantar-r04/project/
+          grep -n "applicationId\|versionCode\|versionName" mubel-kantar-r04/project/app/build.gradle
 
       - uses: actions/setup-java@v4
         with:
@@ -46,35 +31,57 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK 36
-        shell: bash
-        run: |
-          yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null || true
-
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
-      - name: Build APK
-        working-directory: mubel-kantar-r03/project
+      - name: Build debug APK
+        working-directory: mubel-kantar-r04/project
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify and stage APK
+      - name: Verify APK archive
         shell: bash
         run: |
-          APK='mubel-kantar-r03/project/app/build/outputs/apk/debug/app-debug.apk'
+          APK='mubel-kantar-r04/project/app/build/outputs/apk/debug/app-debug.apk'
           test -f "$APK"
           unzip -t "$APK"
-          mkdir -p mubel-kantar-r03/dist
-          cp "$APK" mubel-kantar-r03/dist/MUBEL_KANTAR_UNIVERSAL_2.10.8-R03.apk
-          sha256sum mubel-kantar-r03/dist/MUBEL_KANTAR_UNIVERSAL_2.10.8-R03.apk | tee mubel-kantar-r03/dist/SHA256.txt
-          ls -lh mubel-kantar-r03/dist/MUBEL_KANTAR_UNIVERSAL_2.10.8-R03.apk
+          mkdir -p mubel-kantar-r04/dist
+          cp "$APK" mubel-kantar-r04/dist/MUBEL_KANTAR_UNIVERSAL_2.10.9-R04.apk
+          sha256sum mubel-kantar-r04/dist/MUBEL_KANTAR_UNIVERSAL_2.10.9-R04.apk | tee mubel-kantar-r04/dist/SHA256.txt
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+
+      - name: Emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r mubel-kantar-r04/dist/MUBEL_KANTAR_UNIVERSAL_2.10.9-R04.apk
+            adb logcat -c
+            adb shell am start -W -n com.mubel.kantar.r04/.MainActivity
+            sleep 5
+            adb shell pidof com.mubel.kantar.r04
+            adb shell dumpsys activity activities | grep -m1 'mResumedActivity.*com.mubel.kantar.r04' 
+            if adb logcat -d '*:E' | grep -q 'FATAL EXCEPTION.*com.mubel.kantar.r04'; then adb logcat -d; exit 1; fi
+            adb exec-out screencap -p > mubel-kantar-r04/dist/SMOKE_SCREEN.png
+            adb shell am force-stop com.mubel.kantar.r04
+            adb shell am start -W -n com.mubel.kantar.r04/.MainActivity
+            sleep 3
+            adb shell pidof com.mubel.kantar.r04
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MUBEL_KANTAR_UNIVERSAL_2.10.8-R03
+          name: MUBEL_KANTAR_UNIVERSAL_2.10.9-R04_TESTED
           path: |
-            mubel-kantar-r03/dist/MUBEL_KANTAR_UNIVERSAL_2.10.8-R03.apk
-            mubel-kantar-r03/dist/SHA256.txt
+            mubel-kantar-r04/dist/MUBEL_KANTAR_UNIVERSAL_2.10.9-R04.apk
+            mubel-kantar-r04/dist/SHA256.txt
+            mubel-kantar-r04/dist/SMOKE_SCREEN.png
           if-no-files-found: error
           retention-days: 30
