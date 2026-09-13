@@ -6,6 +6,7 @@ on:
     paths:
       - 'mubel-v2103/project/**'
       - '.github/workflows/mubel-v2103-build.yml'
+      - '.github/scripts/mubel-v2107-smoke.sh'
   workflow_dispatch:
 
 permissions:
@@ -62,63 +63,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            set -eu
-            REPORT='mubel-v2103/dist/SMOKE_REPORT.txt'
-            APK='mubel-v2103/dist/MUBEL_KANTAR_2.10.6_STABIL_WIRELESS_R01.apk'
-            PKG='com.mubel.kantar.v2106wireless'
-            ACT='com.mubel.kantar.MainActivityWireless'
-            echo '=== INSTALL ===' > "$REPORT"
-            adb install -r "$APK" | tee -a "$REPORT"
-            adb shell pm path "$PKG" | tee -a "$REPORT"
-            adb logcat -c
-            echo '=== COLD LAUNCH ===' | tee -a "$REPORT"
-            adb shell am force-stop "$PKG"
-            adb shell am start -W -n "$PKG/$ACT" | tee -a "$REPORT"
-            sleep 6
-            test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
-            adb exec-out screencap -p > mubel-v2103/dist/SCREEN_MAIN.png
-            adb shell uiautomator dump /sdcard/u.xml >/dev/null
-            adb pull /sdcard/u.xml /tmp/u.xml >/dev/null
-            grep -q 'KABLOSUZ' /tmp/u.xml
-            python3 - <<'PY'
-            import re, subprocess, xml.etree.ElementTree as ET
-            root=ET.parse('/tmp/u.xml').getroot()
-            for n in root.iter('node'):
-                if n.attrib.get('text')=='KABLOSUZ':
-                    m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', n.attrib['bounds'])
-                    x=(int(m.group(1))+int(m.group(3)))//2; y=(int(m.group(2))+int(m.group(4)))//2
-                    subprocess.check_call(['adb','shell','input','tap',str(x),str(y)])
-                    break
-            else: raise SystemExit('KABLOSUZ button not found')
-            PY
-            sleep 2
-            adb shell uiautomator dump /sdcard/w.xml >/dev/null
-            adb pull /sdcard/w.xml /tmp/w.xml >/dev/null
-            grep -q 'IR DONANIM TEST' /tmp/w.xml
-            adb exec-out screencap -p > mubel-v2103/dist/SCREEN_WIRELESS.png
-            python3 - <<'PY'
-            import re, subprocess, xml.etree.ElementTree as ET
-            root=ET.parse('/tmp/w.xml').getroot()
-            for n in root.iter('node'):
-                if n.attrib.get('text')=='IR DONANIM TEST':
-                    m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', n.attrib['bounds'])
-                    x=(int(m.group(1))+int(m.group(3)))//2; y=(int(m.group(2))+int(m.group(4)))//2
-                    subprocess.check_call(['adb','shell','input','tap',str(x),str(y)])
-                    break
-            else: raise SystemExit('IR test button not found')
-            PY
-            sleep 2
-            test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
-            adb shell uiautomator dump /sdcard/ir.xml >/dev/null
-            adb pull /sdcard/ir.xml /tmp/ir.xml >/dev/null
-            cp /tmp/ir.xml mubel-v2103/dist/UI_AFTER_IR.xml
-            adb exec-out screencap -p > mubel-v2103/dist/SCREEN_IR_TEST.png
-            if adb logcat -d | grep -E 'FATAL EXCEPTION|Process: com.mubel.kantar.v2106wireless|SecurityException.*TRANSMIT_IR'; then
-              echo 'FAIL: crash/security error found' | tee -a "$REPORT"
-              exit 1
-            fi
-            echo 'SMOKE_TEST=PASS' | tee -a "$REPORT"
+          script: bash .github/scripts/mubel-v2107-smoke.sh
 
       - uses: actions/upload-artifact@v4
         with:
