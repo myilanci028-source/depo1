@@ -63,7 +63,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -euo pipefail
+            set -eu
             REPORT='mubel-v2103/dist/SMOKE_REPORT.txt'
             APK='mubel-v2103/dist/MUBEL_KANTAR_2.10.6_STABIL_WIRELESS_R01.apk'
             PKG='com.mubel.kantar.v2106wireless'
