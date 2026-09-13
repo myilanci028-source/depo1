@@ -149,7 +149,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -euo pipefail
+            set -eu
             APK='mubel-kantar-stable-triple/dist/MUBEL_KANTAR_2.10.6_STABIL_WIFI_BLUETOOTH_IR.apk'
             PKG='com.mubel.kantar.v2107triple'
             ACT='com.mubel.kantar.MainActivity'
