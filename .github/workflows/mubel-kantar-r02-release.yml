@@ -28,7 +28,9 @@ jobs:
           mkdir -p mubel-kantar-r02/project /tmp/mubel-r02-src
           unzip -q /tmp/mubel-r02.zip -d /tmp/mubel-r02-src
           cp -a /tmp/mubel-r02-src/MUBEL_Kantar_Android_R02/. mubel-kantar-r02/project/
+          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\nandroid.suppressUnsupportedCompileSdk=36\n' > mubel-kantar-r02/project/gradle.properties
           grep -n "applicationId\|versionCode\|versionName" mubel-kantar-r02/project/app/build.gradle
+          cat mubel-kantar-r02/project/gradle.properties
 
       - uses: actions/setup-java@v4
         with:
