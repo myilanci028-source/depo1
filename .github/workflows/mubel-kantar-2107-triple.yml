@@ -18,14 +18,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract stable-based source
+      - name: Rebuild and verify stable-based source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/mubel2107 mubel-kantar-2107/project
-          mkdir -p /tmp/mubel2107 mubel-kantar-2107/project
-          tar -xzf mubel-kantar-2107/source.tar.gz -C /tmp/mubel2107
-          cp -a /tmp/mubel2107/MUBEL_KANTAR_2107_TRIPLE/. mubel-kantar-2107/project/
+          echo 'c4add1b8af3184161c9e9c90170b7f49958ef650f6a3f607c123146c017187a9  mubel-kantar-2107/source.part00' | sha256sum -c -
+          echo '3a12155564aa86c0b7dce6013f74a99a65eb6023dcf3376a17d4b3192e2d2244  mubel-kantar-2107/source.part01' | sha256sum -c -
+          echo '6b9f2759b1eef3dcb88f618399ec9cb2a5506be522b75c727a9fc3eccec8a7ed  mubel-kantar-2107/source.part02' | sha256sum -c -
+          echo '19fb0dafc23eb15185fc9b195561ddc11e2a73a8fa31f8f48f1e81cbe66423f1  mubel-kantar-2107/source.part03' | sha256sum -c -
+          cat mubel-kantar-2107/source.part00 mubel-kantar-2107/source.part01 mubel-kantar-2107/source.part02 mubel-kantar-2107/source.part03 > /tmp/mubel2107.b64
+          base64 -d /tmp/mubel2107.b64 > /tmp/mubel2107.tar.gz
+          echo 'bb7d245826cd797996f83961b52700943de5c9be2c48b630a1497cb2b3177f69  /tmp/mubel2107.tar.gz' | sha256sum -c -
+          tar -tzf /tmp/mubel2107.tar.gz >/dev/null
+          rm -rf /tmp/mubel2107src mubel-kantar-2107/project
+          mkdir -p /tmp/mubel2107src mubel-kantar-2107/project
+          tar -xzf /tmp/mubel2107.tar.gz -C /tmp/mubel2107src
+          cp -a /tmp/mubel2107src/MUBEL_KANTAR_2107_TRIPLE/. mubel-kantar-2107/project/
           grep -n "applicationId\|versionCode\|versionName" mubel-kantar-2107/project/app/build.gradle
           grep -n "TRANSMIT_IR\|BLUETOOTH_SCAN\|BLUETOOTH_CONNECT" mubel-kantar-2107/project/app/src/main/AndroidManifest.xml
 
@@ -83,7 +91,7 @@ jobs:
             echo '=== INSTALL ===' > mubel-kantar-2107/dist/SMOKE_REPORT.txt
             adb install -r "$APK" | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
             adb shell pm path com.mubel.kantar.triple | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
-            echo '=== PERMISSIONS ===' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            echo '=== DECLARED PERMISSIONS ===' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
             adb shell dumpsys package com.mubel.kantar.triple | grep -E 'TRANSMIT_IR|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|INTERNET' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt || true
             echo '=== LAUNCH 1 ===' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
             adb logcat -c
