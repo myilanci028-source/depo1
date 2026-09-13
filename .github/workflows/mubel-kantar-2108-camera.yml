@@ -1,0 +1,196 @@
+name: MUBEL KANTAR 2.10.8 STABLE + CAMERA LIVE DATA
+
+on:
+  push:
+    branches: [mubel-kantar-2108-camera]
+    paths:
+      - 'mubel-kantar-2108-overlay/**'
+      - '.github/workflows/mubel-kantar-2108-camera.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare exact 2.10.7 stable base plus camera-only additions
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC='extracted-2107/mubel_stable_triple'
+          PRJ='mubel-kantar-2108/project'
+          rm -rf mubel-kantar-2108
+          mkdir -p "$PRJ"
+          cp -a "$SRC"/. "$PRJ"/
+
+          # Record hashes of the stable core before any additive camera work.
+          cd "$PRJ/app/src/main/assets"
+          sha256sum style.css app.js printfix.js v210.js v2102.js v2105.js v2106.js v2107.js > /tmp/stable_core.sha256
+          cd "$GITHUB_WORKSPACE"
+
+          cp mubel-kantar-2108-overlay/CameraActivity.java "$PRJ/app/src/main/java/com/mubel/kantar/CameraActivity.java"
+          cp mubel-kantar-2108-overlay/v2108.js "$PRJ/app/src/main/assets/v2108.js"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('mubel-kantar-2108/project/app/src/main/java/com/mubel/kantar/MainActivity.java')
+          s=p.read_text(encoding='utf-8')
+          old='''        @JavascriptInterface public void sendMailPdf(String html, String to, String subject, String body, String fis) { renderPdfAndSend(html,to,subject,body,fis); }\n    }'''
+          new='''        @JavascriptInterface public void sendMailPdf(String html, String to, String subject, String body, String fis) { renderPdfAndSend(html,to,subject,body,fis); }\n        @JavascriptInterface public void openCameraLive() { runOnUiThread(() -> {\n            try {\n                final android.os.ResultReceiver rr = new android.os.ResultReceiver(ui) {\n                    @Override protected void onReceiveResult(int resultCode, Bundle data) {\n                        if (data == null) return;\n                        if (resultCode == 1 && data.containsKey("kg")) {\n                            double kg = data.getDouble("kg", Double.NaN);\n                            String source = data.getString("source", "OCR");\n                            int votes = data.getInt("votes", 0);\n                            if (Double.isFinite(kg)) js("window.MUBEL_CAMERA_WEIGHT&&window.MUBEL_CAMERA_WEIGHT("+Double.toString(kg)+","+q(source)+","+votes+");");\n                        }\n                        String state = data.getString("state", "");\n                        String detail = data.getString("detail", "");\n                        if (state != null && !state.isEmpty()) js("window.MUBEL_CAMERA_STATUS&&window.MUBEL_CAMERA_STATUS("+q(state)+","+q(detail)+");");\n                    }\n                };\n                Intent i = new Intent(MainActivity.this, CameraActivity.class);\n                i.putExtra("receiver", rr);\n                startActivity(i);\n            } catch (Exception e) { toast("Kamera açılamadı: "+safe(e)); }\n        }); }\n    }'''
+          if old not in s: raise SystemExit('MainActivity bridge insertion marker not found')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+
+          p=Path('mubel-kantar-2108/project/app/src/main/assets/index.html')
+          s=p.read_text(encoding='utf-8')
+          if 'v2108.js' not in s:
+              s=s.replace('</body>','<script src="v2108.js"></script>\n</body>')
+          p.write_text(s,encoding='utf-8')
+
+          p=Path('mubel-kantar-2108/project/app/src/main/AndroidManifest.xml')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('<uses-permission android:name="android.permission.TRANSMIT_IR"/>', '<uses-permission android:name="android.permission.TRANSMIT_IR"/>\n    <uses-permission android:name="android.permission.CAMERA"/>')
+          s=s.replace('<uses-feature android:name="android.hardware.consumerir" android:required="false"/>', '<uses-feature android:name="android.hardware.consumerir" android:required="false"/>\n    <uses-feature android:name="android.hardware.camera.any" android:required="false"/>\n    <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>')
+          marker='''        <activity\n            android:name=".MainActivity"'''
+          camera='''        <activity\n            android:name=".CameraActivity"\n            android:exported="false"\n            android:screenOrientation="portrait"/>\n        <activity\n            android:name=".MainActivity"'''
+          if marker not in s: raise SystemExit('Manifest activity marker not found')
+          s=s.replace(marker,camera,1)
+          p.write_text(s,encoding='utf-8')
+
+          p=Path('mubel-kantar-2108/project/app/build.gradle')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace("applicationId 'com.mubel.kantar.v2107triple'", "applicationId 'com.mubel.kantar.v2108camera'")
+          s=s.replace('versionCode 2107','versionCode 2108')
+          s=s.replace("versionName '2.10.7-STABLE-TRIPLE'", "versionName '2.10.8-STABLE-CAMERA'")
+          deps='''\n    implementation 'androidx.activity:activity:1.10.1'\n    implementation 'androidx.camera:camera-core:1.4.2'\n    implementation 'androidx.camera:camera-camera2:1.4.2'\n    implementation 'androidx.camera:camera-lifecycle:1.4.2'\n    implementation 'androidx.camera:camera-view:1.4.2'\n    implementation 'com.google.mlkit:text-recognition:16.0.1'\n'''
+          needle="    implementation 'com.sun.mail:android-activation:1.6.7'\n"
+          if needle not in s: raise SystemExit('Gradle dependency marker not found')
+          s=s.replace(needle,needle+deps,1)
+          s += '''\nandroid {\n    packaging {\n        resources {\n            excludes += ['META-INF/LICENSE.md','META-INF/LICENSE.txt','META-INF/NOTICE.md','META-INF/NOTICE.txt']\n        }\n    }\n}\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+
+          # Prove the existing stable application logic/assets remain byte-identical.
+          cd "$PRJ/app/src/main/assets"
+          sha256sum -c /tmp/stable_core.sha256
+          node --check app.js
+          node --check v2107.js
+          node --check v2108.js
+          cd "$GITHUB_WORKSPACE"
+          grep -n "applicationId\|versionCode\|versionName" "$PRJ/app/build.gradle"
+          grep -n "CAMERA\|TRANSMIT_IR\|BLUETOOTH_SCAN\|BLUETOOTH_CONNECT" "$PRJ/app/src/main/AndroidManifest.xml"
+          grep -n "openCameraLive\|MUBEL_CAMERA_WEIGHT" "$PRJ/app/src/main/java/com/mubel/kantar/MainActivity.java" "$PRJ/app/src/main/assets/v2108.js"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build APK
+        working-directory: mubel-kantar-2108/project
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK structure, permissions and camera assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='mubel-kantar-2108/project/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          unzip -t "$APK"
+          mkdir -p mubel-kantar-2108/dist
+          OUT='mubel-kantar-2108/dist/MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_VERI.apk'
+          cp "$APK" "$OUT"
+          unzip -l "$OUT" > mubel-kantar-2108/dist/APK_CONTENTS.txt
+          grep -q 'assets/app.js' mubel-kantar-2108/dist/APK_CONTENTS.txt
+          grep -q 'assets/v2107.js' mubel-kantar-2108/dist/APK_CONTENTS.txt
+          grep -q 'assets/v2108.js' mubel-kantar-2108/dist/APK_CONTENTS.txt
+          $ANDROID_HOME/build-tools/36.0.0/aapt2 dump xmltree "$OUT" --file AndroidManifest.xml > mubel-kantar-2108/dist/MANIFEST_DUMP.txt
+          grep -q 'android.permission.CAMERA' mubel-kantar-2108/dist/MANIFEST_DUMP.txt
+          grep -q 'android.permission.TRANSMIT_IR' mubel-kantar-2108/dist/MANIFEST_DUMP.txt
+          grep -q 'android.permission.BLUETOOTH_SCAN' mubel-kantar-2108/dist/MANIFEST_DUMP.txt
+          grep -q 'android.permission.BLUETOOTH_CONNECT' mubel-kantar-2108/dist/MANIFEST_DUMP.txt
+          sha256sum "$OUT" | tee mubel-kantar-2108/dist/SHA256.txt
+          ls -lh "$OUT"
+
+      - name: Prepare Android 16 smoke script
+        shell: bash
+        run: |
+          cat > mubel-kantar-2108/smoke_android16.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          APK='mubel-kantar-2108/dist/MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_VERI.apk'
+          PKG='com.mubel.kantar.v2108camera'
+          MAIN='com.mubel.kantar.MainActivity'
+          CAM='com.mubel.kantar.CameraActivity'
+          REPORT='mubel-kantar-2108/dist/SMOKE_REPORT.txt'
+          echo '=== INSTALL ===' > "$REPORT"
+          adb install -r "$APK" | tee -a "$REPORT"
+          adb shell pm path "$PKG" | tee -a "$REPORT"
+          adb shell pm grant "$PKG" android.permission.CAMERA || true
+          echo '=== MAIN LAUNCH 1 ===' | tee -a "$REPORT"
+          adb logcat -c
+          adb shell am force-stop "$PKG"
+          adb shell am start -W -n "$PKG/$MAIN" | tee -a "$REPORT"
+          sleep 6
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          adb exec-out screencap -p > mubel-kantar-2108/dist/SCREEN_MAIN.png
+          echo '=== CAMERA ACTIVITY ===' | tee -a "$REPORT"
+          adb logcat -c
+          adb shell am start -W -n "$PKG/$CAM" | tee -a "$REPORT"
+          sleep 8
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          adb exec-out screencap -p > mubel-kantar-2108/dist/SCREEN_CAMERA.png
+          echo '=== MAIN LAUNCH 2 ===' | tee -a "$REPORT"
+          adb shell am force-stop "$PKG"
+          adb shell am start -W -n "$PKG/$MAIN" | tee -a "$REPORT"
+          sleep 5
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          echo 'SMOKE_TEST=PASS' | tee -a "$REPORT"
+          EOF
+          chmod +x mubel-kantar-2108/smoke_android16.sh
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+
+      - name: Android 16 install + camera launch + double main launch
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
+          script: bash mubel-kantar-2108/smoke_android16.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_VERI_ANDROID16_TESTED
+          path: |
+            mubel-kantar-2108/dist/MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_VERI.apk
+            mubel-kantar-2108/dist/SHA256.txt
+            mubel-kantar-2108/dist/MANIFEST_DUMP.txt
+            mubel-kantar-2108/dist/APK_CONTENTS.txt
+            mubel-kantar-2108/dist/SMOKE_REPORT.txt
+            mubel-kantar-2108/dist/SCREEN_MAIN.png
+            mubel-kantar-2108/dist/SCREEN_CAMERA.png
+          if-no-files-found: error
+          retention-days: 30
