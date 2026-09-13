@@ -31,21 +31,16 @@ test -n "$PID"
 echo "PID=$PID" | tee -a "$REPORT"
 adb exec-out screencap -p > mubel-v2103/dist/SCREEN_MAIN.png
 
-# WebView DOM düğmeleri bazı Android emulator sürümlerinde UIAutomator ağacına aktarılmayabilir.
-# Bu yüzden ekran ağacını tanısal olarak kaydediyor, test sonucunu erişilebilirlik ağacına bağlamıyoruz.
 adb shell uiautomator dump /sdcard/u.xml >/dev/null || true
 adb pull /sdcard/u.xml mubel-v2103/dist/UI_MAIN.xml >/dev/null 2>&1 || true
 
-# KABLOSUZ düğmesi CSS ile sağ-alt köşededir. Pixel 6 emülatörde güvenli bölgeye dokunup
-# modalı açmayı deniyoruz; buton henüz görünür değilse bu dokunuş uygulamayı etkilemez.
-adb shell input tap 980 2190 || true
+# Pixel 6 / 1080x2400: KABLOSUZ butonunun gorunen ust bolgesine dokun.
+adb shell input tap 930 2280 || true
 sleep 2
 adb exec-out screencap -p > mubel-v2103/dist/SCREEN_WIRELESS.png
 adb shell uiautomator dump /sdcard/w.xml >/dev/null || true
 adb pull /sdcard/w.xml mubel-v2103/dist/UI_WIRELESS.xml >/dev/null 2>&1 || true
 
-# IR donanımı olmayan emülatörde dahi uygulama ve wireless katmanı SecurityException/crash üretmemeli.
-# Manifestte TRANSMIT_IR yukarıda ayrıca doğrulandı.
 sleep 2
 test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
 adb exec-out screencap -p > mubel-v2103/dist/SCREEN_IR_TEST.png
