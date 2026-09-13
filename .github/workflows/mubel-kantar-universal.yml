@@ -1,0 +1,72 @@
+name: MUBEL KANTAR UNIVERSAL R01 APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mubel-kantar-universal/source.zip'
+      - '.github/workflows/mubel-kantar-universal.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract project source
+        run: |
+          rm -rf mubel-kantar-universal/project
+          mkdir -p mubel-kantar-universal/project
+          unzip -q mubel-kantar-universal/source.zip -d mubel-kantar-universal/project
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build debug APK
+        working-directory: mubel-kantar-universal/project/MUBEL_Kantar_Android_R01
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify and stage APK
+        shell: bash
+        run: |
+          APK='mubel-kantar-universal/project/MUBEL_Kantar_Android_R01/app/build/outputs/apk/debug/app-debug.apk'
+          unzip -t "$APK"
+          mkdir -p mubel-kantar-universal/dist
+          cp "$APK" mubel-kantar-universal/dist/MUBEL_KANTAR_UNIVERSAL_R01.apk
+          sha256sum "$APK" | tee mubel-kantar-universal/dist/MUBEL_KANTAR_UNIVERSAL_R01.sha256.txt
+          base64 -w0 "$APK" > mubel-kantar-universal/dist/MUBEL_KANTAR_UNIVERSAL_R01.apk.b64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_UNIVERSAL_R01
+          path: mubel-kantar-universal/dist/MUBEL_KANTAR_UNIVERSAL_R01.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish APK result
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mubel-kantar-universal/dist/MUBEL_KANTAR_UNIVERSAL_R01.apk.b64 mubel-kantar-universal/dist/MUBEL_KANTAR_UNIVERSAL_R01.sha256.txt
+          git commit -m 'Publish MUBEL KANTAR UNIVERSAL R01 APK [skip ci]' || exit 0
+          git push
