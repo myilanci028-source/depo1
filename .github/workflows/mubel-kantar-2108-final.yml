@@ -133,7 +133,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
           script: |
-            set -euo pipefail
+            set -eu
             APK='mubel-kantar-2108-final/dist/MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_VERI.apk'
             PKG='com.mubel.kantar.v2108camera'
             REPORT='mubel-kantar-2108-final/dist/SMOKE_REPORT.txt'
