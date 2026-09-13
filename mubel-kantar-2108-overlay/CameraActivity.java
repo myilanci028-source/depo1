@@ -237,7 +237,7 @@ public class CameraActivity extends ComponentActivity {
 
                 Preview.Builder pb = new Preview.Builder();
                 try {
-                    Camera2Interop.Extender<Preview.Builder> ex = new Camera2Interop.Extender<>(pb);
+                    Camera2Interop.Extender<Preview> ex = new Camera2Interop.Extender<>(pb);
                     ex.setCaptureRequestOption(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_50HZ);
                     ex.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                 } catch (Exception ignored) {}
@@ -248,7 +248,7 @@ public class CameraActivity extends ComponentActivity {
                         .setTargetResolution(new Size(1280,720))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST);
                 try {
-                    Camera2Interop.Extender<ImageAnalysis.Builder> ex = new Camera2Interop.Extender<>(ab);
+                    Camera2Interop.Extender<ImageAnalysis> ex = new Camera2Interop.Extender<>(ab);
                     ex.setCaptureRequestOption(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_50HZ);
                     ex.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                 } catch (Exception ignored) {}
