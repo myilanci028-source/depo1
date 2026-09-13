@@ -65,7 +65,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -euo pipefail
+            set -eu
             APK='mubel-kantar-r04/dist/MUBEL_KANTAR_UNIVERSAL_2.10.9-R04.apk'
             REPORT='mubel-kantar-r04/dist/SMOKE_REPORT.txt'
             : > "$REPORT"
