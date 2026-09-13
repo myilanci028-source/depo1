@@ -1,0 +1,35 @@
+name: Extract MUBEL KANTAR 2.10.7 Stable Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [mubel-kantar-2108-camera]
+    paths:
+      - '.github/workflows/extract-2107-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mubel-kantar-2108-camera
+      - name: Extract source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf extracted-2107
+          mkdir extracted-2107
+          tar -xzf mubel-kantar-2107/source.tar.gz -C extracted-2107
+          find extracted-2107 -maxdepth 4 -type f | sort | head -200
+      - name: Commit extracted source
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add extracted-2107
+          git commit -m 'Extract MUBEL KANTAR 2.10.7 stable project' || exit 0
+          git push origin HEAD:mubel-kantar-2108-camera
