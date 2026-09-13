@@ -1,0 +1,69 @@
+name: MUBEL KANTAR UNIVERSAL 2.10.7-R02 APK
+
+on:
+  push:
+    branches: [mubel-kantar-r02-release]
+    paths:
+      - 'mubel-kantar-r02/**'
+      - '.github/workflows/mubel-kantar-r02-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild source ZIP from parts
+        shell: bash
+        run: |
+          cat mubel-kantar-r02/source.part00 mubel-kantar-r02/source.part01 mubel-kantar-r02/source.part02 mubel-kantar-r02/source.part03 > /tmp/mubel-r02.b64
+          base64 -d /tmp/mubel-r02.b64 > /tmp/mubel-r02.zip
+          unzip -t /tmp/mubel-r02.zip
+          rm -rf mubel-kantar-r02/project /tmp/mubel-r02-src
+          mkdir -p mubel-kantar-r02/project /tmp/mubel-r02-src
+          unzip -q /tmp/mubel-r02.zip -d /tmp/mubel-r02-src
+          cp -a /tmp/mubel-r02-src/MUBEL_Kantar_Android_R02/. mubel-kantar-r02/project/
+          grep -n "applicationId\|versionCode\|versionName" mubel-kantar-r02/project/app/build.gradle
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build APK
+        working-directory: mubel-kantar-r02/project
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify and stage APK
+        shell: bash
+        run: |
+          APK='mubel-kantar-r02/project/app/build/outputs/apk/debug/app-debug.apk'
+          test -f "$APK"
+          unzip -t "$APK"
+          mkdir -p mubel-kantar-r02/dist
+          cp "$APK" mubel-kantar-r02/dist/MUBEL_KANTAR_UNIVERSAL_2.10.7-R02.apk
+          sha256sum mubel-kantar-r02/dist/MUBEL_KANTAR_UNIVERSAL_2.10.7-R02.apk | tee mubel-kantar-r02/dist/SHA256.txt
+          ls -lh mubel-kantar-r02/dist/MUBEL_KANTAR_UNIVERSAL_2.10.7-R02.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_UNIVERSAL_2.10.7-R02
+          path: |
+            mubel-kantar-r02/dist/MUBEL_KANTAR_UNIVERSAL_2.10.7-R02.apk
+            mubel-kantar-r02/dist/SHA256.txt
+          if-no-files-found: error
+          retention-days: 30
