@@ -18,16 +18,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Rebuild R03 source archive
+      - name: Rebuild and verify R03 source archive
         shell: bash
         run: |
-          wc -c mubel-kantar-r03/source.part0*
-          sha256sum mubel-kantar-r03/source.part0*
-          cat mubel-kantar-r03/source.part00 mubel-kantar-r03/source.part01 mubel-kantar-r03/source.part02 mubel-kantar-r03/source.part03 mubel-kantar-r03/source.part04 > /tmp/mubel-r03.b64
-          wc -c /tmp/mubel-r03.b64
-          sha256sum /tmp/mubel-r03.b64
+          echo 'd20234c6f904750872106ab40f7266d0a49449fe16ddb02848c97720ddd6b70b  mubel-kantar-r03/source.part00' | sha256sum -c -
+          echo '4e9012905fb8a36c4bdd831d4c73149d71059d2663c223537fa9387534363dd1  mubel-kantar-r03/source.part01' | sha256sum -c -
+          echo 'd28d28bc0adccd5508dc140615321c69e0c6e42f2a77a088deaafbb3f461a42e  mubel-kantar-r03/source.part02' | sha256sum -c -
+          echo '395b42f3eda1f39d231e16750134809f1e090e33834932a6e7e448f8f63bc239  mubel-kantar-r03/source.part03a' | sha256sum -c -
+          echo '895c64e17321d0c8e6ad0511bb12b0d8a3d4d33398cc12fbe127181d3b85e3a6  mubel-kantar-r03/source.part03b' | sha256sum -c -
+          echo '5ff2720ff86a852e26f925f18e5a37a53644973329afcec0aee7b968e4a760af  mubel-kantar-r03/source.part04' | sha256sum -c -
+          cat mubel-kantar-r03/source.part00 mubel-kantar-r03/source.part01 mubel-kantar-r03/source.part02 mubel-kantar-r03/source.part03a mubel-kantar-r03/source.part03b mubel-kantar-r03/source.part04 > /tmp/mubel-r03.b64
+          echo '53da8ad3769647a1415801cca7b6daeb1753248d120120c0cb810d2a4fffd9cd  /tmp/mubel-r03.b64' | sha256sum -c -
           base64 -d /tmp/mubel-r03.b64 > /tmp/mubel-r03.tar.xz
-          sha256sum /tmp/mubel-r03.tar.xz
+          echo '4823fc53c933ba566ce3cf2bdd34e32db0a04f21cce8ff1040a42d5efc5e2d0a  /tmp/mubel-r03.tar.xz' | sha256sum -c -
           xz -t /tmp/mubel-r03.tar.xz
           rm -rf mubel-kantar-r03/project /tmp/mubel-r03-src
           mkdir -p mubel-kantar-r03/project /tmp/mubel-r03-src
