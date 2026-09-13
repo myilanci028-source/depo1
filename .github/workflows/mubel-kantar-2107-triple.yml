@@ -134,6 +134,43 @@ jobs:
           sha256sum "$OUT" | tee mubel-kantar-stable-triple/dist/SHA256.txt
           ls -lh "$OUT"
 
+      - name: Prepare Android 16 smoke test script
+        shell: bash
+        run: |
+          cat > mubel-kantar-stable-triple/smoke_android16.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          APK='mubel-kantar-stable-triple/dist/MUBEL_KANTAR_2.10.6_STABIL_WIFI_BLUETOOTH_IR.apk'
+          PKG='com.mubel.kantar.v2107triple'
+          ACT='com.mubel.kantar.MainActivity'
+          REPORT='mubel-kantar-stable-triple/dist/SMOKE_REPORT.txt'
+          echo '=== INSTALL ===' > "$REPORT"
+          adb install -r "$APK" | tee -a "$REPORT"
+          adb shell pm path "$PKG" | tee -a "$REPORT"
+          echo '=== DECLARED PERMISSIONS ===' | tee -a "$REPORT"
+          adb shell dumpsys package "$PKG" | grep -E 'TRANSMIT_IR|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|INTERNET' | tee -a "$REPORT" || true
+          echo '=== LAUNCH 1 ===' | tee -a "$REPORT"
+          adb logcat -c
+          adb shell am force-stop "$PKG"
+          adb shell am start -W -n "$PKG/$ACT" | tee -a "$REPORT"
+          sleep 6
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          adb exec-out screencap -p > mubel-kantar-stable-triple/dist/SCREEN_1.png
+          adb shell uiautomator dump /sdcard/window.xml >/dev/null || true
+          adb pull /sdcard/window.xml mubel-kantar-stable-triple/dist/UI_1.xml >/dev/null || true
+          echo '=== LAUNCH 2 ===' | tee -a "$REPORT"
+          adb logcat -c
+          adb shell am force-stop "$PKG"
+          adb shell am start -W -n "$PKG/$ACT" | tee -a "$REPORT"
+          sleep 6
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          adb exec-out screencap -p > mubel-kantar-stable-triple/dist/SCREEN_2.png
+          echo 'SMOKE_TEST=PASS' | tee -a "$REPORT"
+          EOF
+          chmod +x mubel-kantar-stable-triple/smoke_android16.sh
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -148,36 +185,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            set -eu
-            APK='mubel-kantar-stable-triple/dist/MUBEL_KANTAR_2.10.6_STABIL_WIFI_BLUETOOTH_IR.apk'
-            PKG='com.mubel.kantar.v2107triple'
-            ACT='com.mubel.kantar.MainActivity'
-            REPORT='mubel-kantar-stable-triple/dist/SMOKE_REPORT.txt'
-            echo '=== INSTALL ===' > "$REPORT"
-            adb install -r "$APK" | tee -a "$REPORT"
-            adb shell pm path "$PKG" | tee -a "$REPORT"
-            echo '=== DECLARED PERMISSIONS ===' | tee -a "$REPORT"
-            adb shell dumpsys package "$PKG" | grep -E 'TRANSMIT_IR|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|INTERNET' | tee -a "$REPORT" || true
-            echo '=== LAUNCH 1 ===' | tee -a "$REPORT"
-            adb logcat -c
-            adb shell am force-stop "$PKG"
-            adb shell am start -W -n "$PKG/$ACT" | tee -a "$REPORT"
-            sleep 6
-            test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
-            if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
-            adb exec-out screencap -p > mubel-kantar-stable-triple/dist/SCREEN_1.png
-            adb shell uiautomator dump /sdcard/window.xml >/dev/null || true
-            adb pull /sdcard/window.xml mubel-kantar-stable-triple/dist/UI_1.xml >/dev/null || true
-            echo '=== LAUNCH 2 ===' | tee -a "$REPORT"
-            adb logcat -c
-            adb shell am force-stop "$PKG"
-            adb shell am start -W -n "$PKG/$ACT" | tee -a "$REPORT"
-            sleep 6
-            test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
-            if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
-            adb exec-out screencap -p > mubel-kantar-stable-triple/dist/SCREEN_2.png
-            echo 'SMOKE_TEST=PASS' | tee -a "$REPORT"
+          script: bash mubel-kantar-stable-triple/smoke_android16.sh
 
       - uses: actions/upload-artifact@v4
         with:
