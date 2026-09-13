@@ -4,7 +4,7 @@ on:
   push:
     branches: [mubel-kantar-2107-triple]
     paths:
-      - 'mubel-kantar-stable-triple/**'
+      - 'mubel-kantar-stable-triple/parts2/**'
       - '.github/workflows/mubel-kantar-2107-triple.yml'
   workflow_dispatch:
 
@@ -18,36 +18,63 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Rebuild exact stable-based project
+      - name: Rebuild and verify exact stable-based project
         shell: bash
         run: |
           set -euo pipefail
-          test -s mubel-kantar-stable-triple/source.b64
+          PARTS='mubel-kantar-stable-triple/parts2'
+          cd "$PARTS"
+          sha256sum -c <<'EOF'
+          5463ab54822cf228058113f659b8cb6e0dfc44c1e98fb0e6f15a4b367132df88  source.part00
+          d40721e51b0e77d9927c75ea70a785ef2031d8e7578b85be34c6af225ca48e5e  source.part01
+          0a3c63010a118f172da7e0ca949ae215fdeef12df4d906da41176c378757275f  source.part02
+          33a4ec59ac27692ba14229dd017c0db9ee1afbc5e2785cb744c852db6b4e77f0  source.part03
+          f59e849e976f90312cf67361f0b387663674c7882603429dbfbc7bc49584e340  source.part04
+          6bfbc9a478a255b718b0cdb1a51953897eb4fee47e6190e66ee0bb6848fa9f2f  source.part05
+          44831c117665dc7e54f451692f1cbfe95899e2ea528eb5b2ce519dedb09230ae  source.part06
+          85e0bb3ee1a8c3a471aee35bc8988dce7a8513c8eecdbe6a2c05bcf0b2a17c4d  source.part07
+          4b8ad1cb030bad51f3e5b246f1681f5ea3dcab342e7ab33d9c974825e61582e0  source.part08
+          161a4b62238c1be751b6e6cc19027b701182b7dcbc42788c7ea61ad4abccf6af  source.part09
+          4312aee22edb3cd6977d5965ed609ee523f1e9b3d9e3a920766cf51a43d7de33  source.part10
+          744ae86e73a134a4e832dba94170dbef179f48a47a98521b6b7e2cc4102526e1  source.part11
+          089c7436d61e10b5d15c7ec832223d65c0ec25dc6b3a2e58a21e2333e346aa30  source.part12
+          bac41e0a9bd9b0bdfe47124db7b4b106db473d7d97f37c8f0c3381e135287216  source.part13
+          e7235a610eed5e232dad633bf48a755dd5306fa7c5d017867cad9572cee01230  source.part14
+          37f0dc9545faff26b6d16f5dc917e59d27eba1ba44384405a73da7c1d23fb3f0  source.part15
+          b05614757e66cb4ff9bf72e01328931a7556b5948863fbec153560e9ccc95ecb  source.part16
+          8a0eb9755bd2fd0f5d4781d64ff1013e9f9ee4e8c5ee9d8fede20514cb023de1  source.part17
+          4992ef748bed50e595a741eb94777046181a0f804435a446830e184da1ab2128  source.part18
+          36f7e8cf42f0ee14a9d98d160cfa5d30f3abcf197b5f29ef15206b51043258b0  source.part19
+          723524eefbda7d14133dc7047d28c60815ab39cdf862fda6882ec4b9bcf2be66  source.part20
+          EOF
+          cat source.part{00..20} > /tmp/mubel_stable_triple_source.b64
+          echo '4e2b46d7c8a2089c646e37eec9b813957c3e7ef806145c3981ce21b4ac06627e  /tmp/mubel_stable_triple_source.b64' | sha256sum -c -
+          base64 -d /tmp/mubel_stable_triple_source.b64 > /tmp/mubel_stable_triple_source.tar.gz
+          echo '0a29a13adbbbc3cd3e07486dc444eb72c8011e66e18751a0bb4131173be012b6  /tmp/mubel_stable_triple_source.tar.gz' | sha256sum -c -
+          gzip -t /tmp/mubel_stable_triple_source.tar.gz
+          cd "$GITHUB_WORKSPACE"
           rm -rf /tmp/mubel_src mubel-kantar-stable-triple/project
           mkdir -p /tmp/mubel_src mubel-kantar-stable-triple/project
-          base64 -d mubel-kantar-stable-triple/source.b64 > /tmp/source.tar.gz
-          gzip -t /tmp/source.tar.gz
-          tar -xzf /tmp/source.tar.gz -C /tmp/mubel_src
+          tar -xzf /tmp/mubel_stable_triple_source.tar.gz -C /tmp/mubel_src
           cp -a /tmp/mubel_src/mubel_stable_triple/. mubel-kantar-stable-triple/project/
 
-          # Two defensive fixes found before release: do not invalidate a fresh TCP generation,
-          # and request Android 12+ Bluetooth permission before touching adapter state.
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('mubel-kantar-stable-triple/project/app/src/main/java/com/mubel/kantar/MainActivity.java')
-          s=p.read_text()
-          s=s.replace('final int g = generation.incrementAndGet();\n        disconnectScale(false);', 'disconnectScale(false);\n        final int g = generation.incrementAndGet();')
-          s=s.replace('BluetoothAdapter a=adapter(); if(a==null){tstatus("BT","HATA","Bu telefonda Bluetooth yok");return;} if(!a.isEnabled()){tstatus("BT","HATA","Bluetooth kapalı; telefondan açın");return;} if(!btPerms()){askBtPerms();tstatus("BT","İZİN","Bluetooth iznini verip TARA\'ya tekrar basın");return;}', 'BluetoothAdapter a=adapter(); if(a==null){tstatus("BT","HATA","Bu telefonda Bluetooth yok");return;} if(!btPerms()){askBtPerms();tstatus("BT","İZİN","Bluetooth iznini verip TARA\'ya tekrar basın");return;} if(!a.isEnabled()){tstatus("BT","HATA","Bluetooth kapalı; telefondan açın");return;}')
-          p.write_text(s)
-          PY
-
+          # Exact 2.10.6 stable web assets must remain byte-identical.
+          cd mubel-kantar-stable-triple/project/app/src/main/assets
+          echo '94bb59509f386936d1f8c8626522265133df7a99f5d5ddcdfd17785a912e676c  style.css' | sha256sum -c -
+          echo '041675a7763f687f5f16d5b31a97041db449785976df873de3225023b725a7cb  app.js' | sha256sum -c -
+          echo 'd88c7dfba5a96be52f223bdde4c6ab2813a5d2b37b9aa026af179fbd876d6bb6  printfix.js' | sha256sum -c -
+          echo '5d8fcc1d0d559da414ec74dd308e2ea93b0bd263b719ba6e9cd1dd1ec9b2e3f6  v210.js' | sha256sum -c -
+          echo 'fa3d0012467cab7d72b5196f8e4ae45cf1165904483dc9849966b2be0b5d1e66  v2102.js' | sha256sum -c -
+          echo '7aa9b852d581dfc967d5626bee0db3cd0bc95a7523e870e21bc2976adc8644e0  v2105.js' | sha256sum -c -
+          echo '30ef995f9041dc5de0059239d46c56690fc10aaa501a94a5164a9fd607fe2a82  v2106.js' | sha256sum -c -
+          sed '/<script src="v2107.js"><\/script>/d' index.html > /tmp/index2106.html
+          echo '0b2be4db83842242fbb60511f4035ad19d0077a6c603a09ad9b9eee25b35f538  /tmp/index2106.html' | sha256sum -c -
+          node --check app.js
+          node --check v2106.js
+          node --check v2107.js
+          cd "$GITHUB_WORKSPACE"
           grep -n "applicationId\|versionCode\|versionName" mubel-kantar-stable-triple/project/app/build.gradle
           grep -n "TRANSMIT_IR\|BLUETOOTH_SCAN\|BLUETOOTH_CONNECT" mubel-kantar-stable-triple/project/app/src/main/AndroidManifest.xml
-          grep -q '<script src="v2106.js"></script>' mubel-kantar-stable-triple/project/app/src/main/assets/index.html
-          grep -q '<script src="v2107.js"></script>' mubel-kantar-stable-triple/project/app/src/main/assets/index.html
-          node --check mubel-kantar-stable-triple/project/app/src/main/assets/app.js
-          node --check mubel-kantar-stable-triple/project/app/src/main/assets/v2106.js
-          node --check mubel-kantar-stable-triple/project/app/src/main/assets/v2107.js
 
       - uses: actions/setup-java@v4
         with:
@@ -114,7 +141,6 @@ jobs:
             adb shell pm path "$PKG" | tee -a "$REPORT"
             echo '=== DECLARED PERMISSIONS ===' | tee -a "$REPORT"
             adb shell dumpsys package "$PKG" | grep -E 'TRANSMIT_IR|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|INTERNET' | tee -a "$REPORT" || true
-
             echo '=== LAUNCH 1 ===' | tee -a "$REPORT"
             adb logcat -c
             adb shell am force-stop "$PKG"
@@ -125,7 +151,6 @@ jobs:
             adb exec-out screencap -p > mubel-kantar-stable-triple/dist/SCREEN_1.png
             adb shell uiautomator dump /sdcard/window.xml >/dev/null || true
             adb pull /sdcard/window.xml mubel-kantar-stable-triple/dist/UI_1.xml >/dev/null || true
-
             echo '=== LAUNCH 2 ===' | tee -a "$REPORT"
             adb logcat -c
             adb shell am force-stop "$PKG"
