@@ -5,11 +5,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.mubel.kantar.v2106'
+        applicationId 'com.mubel.kantar.v2106wireless'
         minSdk 23
         targetSdk 35
-        versionCode 2106
-        versionName '2.10.6'
+        versionCode 2107
+        versionName '2.10.6-WIRELESS-R01'
     }
 
     packaging {
