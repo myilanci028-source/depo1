@@ -1,0 +1,72 @@
+name: MUBEL KANTAR UNIVERSAL 2.10.8-R03 APK
+
+on:
+  push:
+    branches: [mubel-kantar-r03-release]
+    paths:
+      - 'mubel-kantar-r03/**'
+      - '.github/workflows/mubel-kantar-r03-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild R03 source archive
+        shell: bash
+        run: |
+          cat mubel-kantar-r03/source.part00 mubel-kantar-r03/source.part01 mubel-kantar-r03/source.part02 mubel-kantar-r03/source.part03 mubel-kantar-r03/source.part04 > /tmp/mubel-r03.b64
+          base64 -d /tmp/mubel-r03.b64 > /tmp/mubel-r03.tar.xz
+          xz -t /tmp/mubel-r03.tar.xz
+          rm -rf mubel-kantar-r03/project /tmp/mubel-r03-src
+          mkdir -p mubel-kantar-r03/project /tmp/mubel-r03-src
+          tar -xJf /tmp/mubel-r03.tar.xz -C /tmp/mubel-r03-src
+          cp -a /tmp/mubel-r03-src/MUBEL_Kantar_Android_R03/. mubel-kantar-r03/project/
+          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\nandroid.suppressUnsupportedCompileSdk=36\n' > mubel-kantar-r03/project/gradle.properties
+          grep -n "applicationId\|versionCode\|versionName" mubel-kantar-r03/project/app/build.gradle
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build APK
+        working-directory: mubel-kantar-r03/project
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify and stage APK
+        shell: bash
+        run: |
+          APK='mubel-kantar-r03/project/app/build/outputs/apk/debug/app-debug.apk'
+          test -f "$APK"
+          unzip -t "$APK"
+          mkdir -p mubel-kantar-r03/dist
+          cp "$APK" mubel-kantar-r03/dist/MUBEL_KANTAR_UNIVERSAL_2.10.8-R03.apk
+          sha256sum mubel-kantar-r03/dist/MUBEL_KANTAR_UNIVERSAL_2.10.8-R03.apk | tee mubel-kantar-r03/dist/SHA256.txt
+          ls -lh mubel-kantar-r03/dist/MUBEL_KANTAR_UNIVERSAL_2.10.8-R03.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_UNIVERSAL_2.10.8-R03
+          path: |
+            mubel-kantar-r03/dist/MUBEL_KANTAR_UNIVERSAL_2.10.8-R03.apk
+            mubel-kantar-r03/dist/SHA256.txt
+          if-no-files-found: error
+          retention-days: 30
