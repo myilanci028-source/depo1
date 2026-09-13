@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.mubel.kantar'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.mubel.kantar.v2107triple'
+        minSdk 23
+        targetSdk 36
+        versionCode 2107
+        versionName '2.10.7-STABLE-TRIPLE'
+    }
+
+    buildTypes {
+        release { minifyEnabled false }
+        debug { minifyEnabled false }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.sun.mail:android-mail:1.6.7'
+    implementation 'com.sun.mail:android-activation:1.6.7'
+}
