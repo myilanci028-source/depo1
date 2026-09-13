@@ -1,0 +1,116 @@
+name: MUBEL KANTAR 2.10.7 TRIPLE APK
+
+on:
+  push:
+    branches: [mubel-kantar-2107-triple]
+    paths:
+      - 'mubel-kantar-2107/**'
+      - '.github/workflows/mubel-kantar-2107-triple.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract stable-based source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/mubel2107 mubel-kantar-2107/project
+          mkdir -p /tmp/mubel2107 mubel-kantar-2107/project
+          tar -xzf mubel-kantar-2107/source.tar.gz -C /tmp/mubel2107
+          cp -a /tmp/mubel2107/MUBEL_KANTAR_2107_TRIPLE/. mubel-kantar-2107/project/
+          grep -n "applicationId\|versionCode\|versionName" mubel-kantar-2107/project/app/build.gradle
+          grep -n "TRANSMIT_IR\|BLUETOOTH_SCAN\|BLUETOOTH_CONNECT" mubel-kantar-2107/project/app/src/main/AndroidManifest.xml
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        shell: bash
+        run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build APK
+        working-directory: mubel-kantar-2107/project
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK and permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='mubel-kantar-2107/project/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          unzip -t "$APK"
+          mkdir -p mubel-kantar-2107/dist
+          cp "$APK" mubel-kantar-2107/dist/MUBEL_KANTAR_2.10.7_KIZILOTESI_BLUETOOTH_WIFI.apk
+          $ANDROID_HOME/build-tools/36.0.0/aapt2 dump xmltree "$APK" --file AndroidManifest.xml > mubel-kantar-2107/dist/MANIFEST_DUMP.txt
+          grep -q 'android.permission.TRANSMIT_IR' mubel-kantar-2107/dist/MANIFEST_DUMP.txt
+          grep -q 'android.permission.BLUETOOTH_SCAN' mubel-kantar-2107/dist/MANIFEST_DUMP.txt
+          grep -q 'android.permission.BLUETOOTH_CONNECT' mubel-kantar-2107/dist/MANIFEST_DUMP.txt
+          sha256sum mubel-kantar-2107/dist/MUBEL_KANTAR_2.10.7_KIZILOTESI_BLUETOOTH_WIFI.apk | tee mubel-kantar-2107/dist/SHA256.txt
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+
+      - name: Android 16 install and double-launch test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -e
+            APK='mubel-kantar-2107/dist/MUBEL_KANTAR_2.10.7_KIZILOTESI_BLUETOOTH_WIFI.apk'
+            echo '=== INSTALL ===' > mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            adb install -r "$APK" | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            adb shell pm path com.mubel.kantar.triple | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            echo '=== PERMISSIONS ===' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            adb shell dumpsys package com.mubel.kantar.triple | grep -E 'TRANSMIT_IR|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|INTERNET' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt || true
+            echo '=== LAUNCH 1 ===' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            adb logcat -c
+            adb shell am force-stop com.mubel.kantar.triple
+            adb shell am start -W -n com.mubel.kantar.triple/.MainActivity | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            sleep 5
+            test -n "$(adb shell pidof com.mubel.kantar.triple | tr -d '\r')"
+            ! adb logcat -d | grep -q 'FATAL EXCEPTION'
+            adb exec-out screencap -p > mubel-kantar-2107/dist/SCREEN_1.png
+            echo '=== LAUNCH 2 ===' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            adb shell am force-stop com.mubel.kantar.triple
+            adb shell am start -W -n com.mubel.kantar.triple/.MainActivity | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            sleep 5
+            test -n "$(adb shell pidof com.mubel.kantar.triple | tr -d '\r')"
+            ! adb logcat -d | grep -q 'FATAL EXCEPTION'
+            adb exec-out screencap -p > mubel-kantar-2107/dist/SCREEN_2.png
+            echo 'SMOKE_TEST=PASS' | tee -a mubel-kantar-2107/dist/SMOKE_REPORT.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_2.10.7_TRIPLE_ANDROID16_TESTED
+          path: |
+            mubel-kantar-2107/dist/MUBEL_KANTAR_2.10.7_KIZILOTESI_BLUETOOTH_WIFI.apk
+            mubel-kantar-2107/dist/SHA256.txt
+            mubel-kantar-2107/dist/MANIFEST_DUMP.txt
+            mubel-kantar-2107/dist/SMOKE_REPORT.txt
+            mubel-kantar-2107/dist/SCREEN_1.png
+            mubel-kantar-2107/dist/SCREEN_2.png
+          if-no-files-found: error
+          retention-days: 30
