@@ -18,6 +18,24 @@ dst.parent.mkdir(parents=True, exist_ok=True)
 shutil.copy2(extra/'CameraLiveActivity.java', dst)
 shutil.copy2(extra/'v2108.js', root/'app/src/main/assets/v2108.js')
 
+# Android 15/16 enforce edge-to-edge for modern targets. Keep title and controls clear of
+# status/navigation bars while leaving the camera preview inside the safe visible area.
+cam=dst.read_text(encoding='utf-8')
+old='        FrameLayout root = new FrameLayout(this); root.setBackgroundColor(Color.BLACK);'
+new='''        FrameLayout root = new FrameLayout(this); root.setBackgroundColor(Color.BLACK);
+        if (Build.VERSION.SDK_INT >= 30) {
+            root.setOnApplyWindowInsetsListener((v, insets) -> {
+                android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars());
+                v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                return insets;
+            });
+            root.requestApplyInsets();
+        } else {
+            root.setFitsSystemWindows(true);
+        }'''
+if old not in cam: raise SystemExit('Camera root marker not found')
+dst.write_text(cam.replace(old,new,1), encoding='utf-8')
+
 # Build version + OCR dependency.
 def patch_gradle(s):
     s=s.replace("applicationId 'com.mubel.kantar.v2107triple'", "applicationId 'com.mubel.kantar.v2108camera'")
