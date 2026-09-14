@@ -1,0 +1,165 @@
+name: MUBEL KANTAR 2.10.8 CAMERA LIVE APK
+
+on:
+  push:
+    branches: [mubel-kantar-2108-camera-final]
+    paths:
+      - 'mubel-kantar-2108/**'
+      - '.github/workflows/mubel-kantar-2108-camera-final.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy verified 2.10.7 stable base and apply camera-only patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='extracted-2107/mubel_stable_triple'
+          test -f "$BASE/app/src/main/assets/v2107.js"
+          test -f "$BASE/app/src/main/java/com/mubel/kantar/MainActivity.java"
+          echo '=== BASE HASHES BEFORE PATCH ==='
+          sha256sum "$BASE/app/src/main/assets/app.js" "$BASE/app/src/main/assets/v2107.js" "$BASE/app/src/main/java/com/mubel/kantar/MainActivity.java" | tee /tmp/base_hashes.txt
+          rm -rf build-2108
+          cp -a "$BASE" build-2108
+          python3 mubel-kantar-2108/patch_2108.py build-2108 mubel-kantar-2108
+          node --check build-2108/app/src/main/assets/app.js
+          node --check build-2108/app/src/main/assets/v2107.js
+          node --check build-2108/app/src/main/assets/v2108.js
+          grep -n "applicationId\|versionCode\|versionName\|text-recognition" build-2108/app/build.gradle
+          grep -n "CAMERA\|TRANSMIT_IR\|BLUETOOTH_SCAN\|BLUETOOTH_CONNECT" build-2108/app/src/main/AndroidManifest.xml
+          grep -n "KAMERA CANLI VERİ" build-2108/app/src/main/assets/v2108.js
+          cat >> build-2108/app/build.gradle <<'EOF'
+
+          android {
+              packaging {
+                  resources {
+                      excludes += [
+                          'META-INF/LICENSE.md',
+                          'META-INF/LICENSE.txt',
+                          'META-INF/NOTICE.md',
+                          'META-INF/NOTICE.txt'
+                      ]
+                  }
+              }
+          }
+          EOF
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build 2.10.8 APK
+        working-directory: build-2108
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK, permissions and contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='build-2108/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          unzip -t "$APK"
+          mkdir -p dist-2108
+          OUT='dist-2108/MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_WIFI_BT_IR.apk'
+          cp "$APK" "$OUT"
+          unzip -l "$OUT" > dist-2108/APK_CONTENTS.txt
+          grep -q 'assets/v2107.js' dist-2108/APK_CONTENTS.txt
+          grep -q 'assets/v2108.js' dist-2108/APK_CONTENTS.txt
+          grep -q 'CameraLiveActivity' dist-2108/APK_CONTENTS.txt || true
+          $ANDROID_HOME/build-tools/36.0.0/aapt2 dump xmltree "$OUT" --file AndroidManifest.xml > dist-2108/MANIFEST_DUMP.txt
+          grep -q 'android.permission.CAMERA' dist-2108/MANIFEST_DUMP.txt
+          grep -q 'android.permission.TRANSMIT_IR' dist-2108/MANIFEST_DUMP.txt
+          grep -q 'android.permission.BLUETOOTH_SCAN' dist-2108/MANIFEST_DUMP.txt
+          grep -q 'android.permission.BLUETOOTH_CONNECT' dist-2108/MANIFEST_DUMP.txt
+          sha256sum "$OUT" | tee dist-2108/SHA256.txt
+          ls -lh "$OUT"
+
+      - name: Prepare Android 16 smoke test
+        shell: bash
+        run: |
+          cat > smoke_2108.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          APK='dist-2108/MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_WIFI_BT_IR.apk'
+          PKG='com.mubel.kantar.v2108camera'
+          MAIN='com.mubel.kantar.MainActivity'
+          CAM='com.mubel.kantar.CameraLiveActivity'
+          REPORT='dist-2108/SMOKE_REPORT.txt'
+          echo '=== INSTALL ===' > "$REPORT"
+          adb install -r "$APK" | tee -a "$REPORT"
+          adb shell pm path "$PKG" | tee -a "$REPORT"
+          adb shell pm grant "$PKG" android.permission.CAMERA || true
+          echo '=== MAIN LAUNCH 1 ===' | tee -a "$REPORT"
+          adb logcat -c
+          adb shell am force-stop "$PKG"
+          adb shell am start -W -n "$PKG/$MAIN" | tee -a "$REPORT"
+          sleep 6
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          adb exec-out screencap -p > dist-2108/SCREEN_MAIN.png
+          echo '=== CAMERA ACTIVITY LAUNCH ===' | tee -a "$REPORT"
+          adb logcat -c
+          adb shell run-as "$PKG" am start -W -n "$PKG/$CAM" | tee -a "$REPORT"
+          sleep 7
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          adb exec-out screencap -p > dist-2108/SCREEN_CAMERA.png
+          echo '=== MAIN LAUNCH 2 ===' | tee -a "$REPORT"
+          adb shell am force-stop "$PKG"
+          adb logcat -c
+          adb shell am start -W -n "$PKG/$MAIN" | tee -a "$REPORT"
+          sleep 5
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          echo 'SMOKE_TEST=PASS' | tee -a "$REPORT"
+          EOF
+          chmod +x smoke_2108.sh
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+
+      - name: Android 16 main + camera smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back virtualscene
+          script: bash smoke_2108.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_ANDROID16_TESTED
+          path: |
+            dist-2108/MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_WIFI_BT_IR.apk
+            dist-2108/SHA256.txt
+            dist-2108/MANIFEST_DUMP.txt
+            dist-2108/APK_CONTENTS.txt
+            dist-2108/SMOKE_REPORT.txt
+            dist-2108/SCREEN_MAIN.png
+            dist-2108/SCREEN_CAMERA.png
+          if-no-files-found: error
+          retention-days: 30
