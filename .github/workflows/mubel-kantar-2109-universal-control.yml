@@ -1,0 +1,220 @@
+name: MUBEL KANTAR 2.10.9 UNIVERSAL CONTROL APK
+
+on:
+  push:
+    branches: [mubel-kantar-2109-universal-control]
+    paths:
+      - 'mubel-kantar-2109/**'
+      - '.github/workflows/mubel-kantar-2109-universal-control.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build workspace from verified 2.10.8 stable base
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='extracted-2107/mubel_stable_triple'
+          test -f "$BASE/app/src/main/assets/v2107.js"
+          test -f 'mubel-kantar-2108/patch_2108.py'
+          test -f 'mubel-kantar-2109/patch_2109.py'
+          echo '=== VERIFIED STABLE BASE HASHES ===' | tee /tmp/base_hashes.txt
+          sha256sum "$BASE/app/src/main/assets/app.js" "$BASE/app/src/main/assets/v2107.js" "$BASE/app/src/main/java/com/mubel/kantar/MainActivity.java" | tee -a /tmp/base_hashes.txt
+          rm -rf build-2109
+          cp -a "$BASE" build-2109
+          python3 mubel-kantar-2108/patch_2108.py build-2109 mubel-kantar-2108
+          python3 mubel-kantar-2109/patch_2109.py build-2109 mubel-kantar-2109
+          node --check build-2109/app/src/main/assets/app.js
+          node --check build-2109/app/src/main/assets/v2107.js
+          node --check build-2109/app/src/main/assets/v2108.js
+          node --check build-2109/app/src/main/assets/v2109.js
+          python3 -m py_compile mubel-kantar-2108/patch_2108.py mubel-kantar-2109/patch_2109.py
+          mkdir -p dist-2109
+          {
+            echo '=== VERSION ==='
+            grep -n "applicationId\|versionCode\|versionName\|text-recognition" build-2109/app/build.gradle
+            echo '=== PRESERVED FEATURES ==='
+            grep -n "CAMERA\|TRANSMIT_IR\|BLUETOOTH_SCAN\|BLUETOOTH_CONNECT" build-2109/app/src/main/AndroidManifest.xml
+            grep -n "KAMERA CANLI VERİ" build-2109/app/src/main/assets/v2108.js
+            echo '=== 2.10.9 CONTROL MATRIX ==='
+            grep -n "POWER\|ZERO\|TARE\|HOLD\|SECOND" build-2109/app/src/main/assets/v2109.js | head -12
+            grep -n "sendCommand\|encodeControlPayload\|parseIrPattern\|resolveIrFrequency\|sendControlBytes" build-2109/app/src/main/java/com/mubel/kantar/MainActivity.java
+            grep -n "v2107.js\|v2108.js\|v2109.js" build-2109/app/src/main/assets/index.html
+          } | tee dist-2109/STATIC_TESTS.txt
+          cat >> build-2109/app/build.gradle <<'EOF'
+
+          android {
+              packaging {
+                  resources {
+                      excludes += [
+                          'META-INF/LICENSE.md',
+                          'META-INF/LICENSE.txt',
+                          'META-INF/NOTICE.md',
+                          'META-INF/NOTICE.txt'
+                      ]
+                  }
+              }
+          }
+          EOF
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build 2.10.9 APK
+        working-directory: build-2109
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK package, permissions and preserved modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='build-2109/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          unzip -t "$APK"
+          OUT='dist-2109/MUBEL_KANTAR_2.10.9_STABIL_UNIVERSAL_KUMANDA_WIFI_BT_IR.apk'
+          cp "$APK" "$OUT"
+          unzip -l "$OUT" > dist-2109/APK_CONTENTS.txt
+          grep -q 'assets/v2107.js' dist-2109/APK_CONTENTS.txt
+          grep -q 'assets/v2108.js' dist-2109/APK_CONTENTS.txt
+          grep -q 'assets/v2109.js' dist-2109/APK_CONTENTS.txt
+          $ANDROID_HOME/build-tools/36.0.0/aapt2 dump badging "$OUT" > dist-2109/BADGING.txt
+          grep -q "package: name='com.mubel.kantar.v2109control'" dist-2109/BADGING.txt
+          grep -q "versionCode='2109'" dist-2109/BADGING.txt
+          $ANDROID_HOME/build-tools/36.0.0/aapt2 dump xmltree "$OUT" --file AndroidManifest.xml > dist-2109/MANIFEST_DUMP.txt
+          grep -q 'android.permission.CAMERA' dist-2109/MANIFEST_DUMP.txt
+          grep -q 'android.permission.TRANSMIT_IR' dist-2109/MANIFEST_DUMP.txt
+          grep -q 'android.permission.BLUETOOTH_SCAN' dist-2109/MANIFEST_DUMP.txt
+          grep -q 'android.permission.BLUETOOTH_CONNECT' dist-2109/MANIFEST_DUMP.txt
+          grep -q 'CameraLiveActivity' dist-2109/MANIFEST_DUMP.txt
+          sha256sum "$OUT" | tee dist-2109/SHA256.txt
+          ls -lh "$OUT"
+
+      - name: Prepare Android 16 universal-control smoke tests
+        shell: bash
+        run: |
+          cat > mock_scale_server.py <<'PY'
+          import socket, pathlib, time
+          out=pathlib.Path('dist-2109/TCP_CONTROL_RX.txt')
+          out.write_text('',encoding='utf-8')
+          s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);s.bind(('0.0.0.0',18899));s.listen(1);s.settimeout(20)
+          try:
+              c,a=s.accept();c.settimeout(12);buf=b'';deadline=time.time()+12
+              while time.time()<deadline:
+                  try:
+                      x=c.recv(4096)
+                      if not x: break
+                      buf+=x
+                      if all(k in buf for k in [b'CI_POWER\n',b'CI_ZERO\n',b'CI_TARE\n',b'CI_HOLD\n',b'CI_SECOND\n']): break
+                  except socket.timeout: break
+              out.write_bytes(buf)
+              c.close()
+          finally:
+              s.close()
+          PY
+          cat > smoke_2109.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          APK='dist-2109/MUBEL_KANTAR_2.10.9_STABIL_UNIVERSAL_KUMANDA_WIFI_BT_IR.apk'
+          PKG='com.mubel.kantar.v2109control'
+          MAIN='com.mubel.kantar.MainActivity'
+          REPORT='dist-2109/SMOKE_REPORT.txt'
+          echo '=== INSTALL ===' > "$REPORT"
+          adb install -r "$APK" | tee -a "$REPORT"
+          adb shell pm path "$PKG" | tee -a "$REPORT"
+          adb shell pm grant "$PKG" android.permission.CAMERA || true
+
+          echo '=== UNIVERSAL CONTROL / REAL TCP OUTPUT ===' | tee -a "$REPORT"
+          python3 mock_scale_server.py &
+          SERVER_PID=$!
+          sleep 1
+          adb logcat -c
+          adb shell am force-stop "$PKG"
+          adb shell am start -W -n "$PKG/$MAIN" --ez mubel_smoke_control true | tee -a "$REPORT"
+          sleep 9
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          wait "$SERVER_PID"
+          adb logcat -d | grep 'MUBEL_CTRL_TEST' | tee -a "$REPORT"
+          adb logcat -d | grep -q 'SELFTEST=PASS|ASCII|HEX|BASE64|IR_RAW|AUTO_ROUTE'
+          for C in POWER ZERO TARE HOLD SECOND; do grep -q "CI_${C}" dist-2109/TCP_CONTROL_RX.txt; done
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          echo 'TCP_COMMAND_MATRIX=PASS' | tee -a "$REPORT"
+          printf '\n=== TCP BYTES ===\n' >> "$REPORT"
+          cat dist-2109/TCP_CONTROL_RX.txt >> "$REPORT"
+          adb exec-out screencap -p > dist-2109/SCREEN_CONTROL_ADMIN.png
+
+          echo '=== CAMERA 2.10.8 REGRESSION TEST ===' | tee -a "$REPORT"
+          adb logcat -c
+          adb shell am force-stop "$PKG"
+          adb shell am start -W -n "$PKG/$MAIN" --ez mubel_smoke_camera true | tee -a "$REPORT"
+          sleep 9
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          adb shell dumpsys activity activities | grep 'CameraLiveActivity' | head -5 | tee -a "$REPORT"
+          adb shell dumpsys activity activities | grep -q 'CameraLiveActivity'
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          adb exec-out screencap -p > dist-2109/SCREEN_CAMERA.png
+
+          echo '=== CLEAN MAIN LAUNCH ===' | tee -a "$REPORT"
+          adb shell am force-stop "$PKG"
+          adb logcat -c
+          adb shell am start -W -n "$PKG/$MAIN" | tee -a "$REPORT"
+          sleep 5
+          test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
+          adb exec-out screencap -p > dist-2109/SCREEN_MAIN.png
+          echo 'ANDROID16_SMOKE_TEST=PASS' | tee -a "$REPORT"
+          EOF
+          chmod +x smoke_2109.sh
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+
+      - name: Android 16 control + camera regression smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back virtualscene
+          script: bash smoke_2109.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_2.10.9_STABIL_UNIVERSAL_KUMANDA_ANDROID16_TESTED
+          path: |
+            dist-2109/MUBEL_KANTAR_2.10.9_STABIL_UNIVERSAL_KUMANDA_WIFI_BT_IR.apk
+            dist-2109/SHA256.txt
+            dist-2109/BADGING.txt
+            dist-2109/MANIFEST_DUMP.txt
+            dist-2109/APK_CONTENTS.txt
+            dist-2109/STATIC_TESTS.txt
+            dist-2109/SMOKE_REPORT.txt
+            dist-2109/TCP_CONTROL_RX.txt
+            dist-2109/SCREEN_MAIN.png
+            dist-2109/SCREEN_CAMERA.png
+            dist-2109/SCREEN_CONTROL_ADMIN.png
+          if-no-files-found: error
+          retention-days: 30
