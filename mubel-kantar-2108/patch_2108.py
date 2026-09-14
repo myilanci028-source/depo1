@@ -23,7 +23,7 @@ shutil.copy2(extra/'v2108.js', root/'app/src/main/assets/v2108.js')
 cam=dst.read_text(encoding='utf-8')
 old='        FrameLayout root = new FrameLayout(this); root.setBackgroundColor(Color.BLACK);'
 new='''        FrameLayout root = new FrameLayout(this); root.setBackgroundColor(Color.BLACK);
-        if (Build.VERSION.SDK_INT >= 30) {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
             root.setOnApplyWindowInsetsListener((v, insets) -> {
                 android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars());
                 v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
