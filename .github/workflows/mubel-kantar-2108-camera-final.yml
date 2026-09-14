@@ -36,6 +36,7 @@ jobs:
           grep -n "applicationId\|versionCode\|versionName\|text-recognition" build-2108/app/build.gradle
           grep -n "CAMERA\|TRANSMIT_IR\|BLUETOOTH_SCAN\|BLUETOOTH_CONNECT" build-2108/app/src/main/AndroidManifest.xml
           grep -n "KAMERA CANLI VERİ" build-2108/app/src/main/assets/v2108.js
+          grep -n "mubel_smoke_camera" build-2108/app/src/main/java/com/mubel/kantar/MainActivity.java
           cat >> build-2108/app/build.gradle <<'EOF'
 
           android {
@@ -84,12 +85,12 @@ jobs:
           unzip -l "$OUT" > dist-2108/APK_CONTENTS.txt
           grep -q 'assets/v2107.js' dist-2108/APK_CONTENTS.txt
           grep -q 'assets/v2108.js' dist-2108/APK_CONTENTS.txt
-          grep -q 'CameraLiveActivity' dist-2108/APK_CONTENTS.txt || true
           $ANDROID_HOME/build-tools/36.0.0/aapt2 dump xmltree "$OUT" --file AndroidManifest.xml > dist-2108/MANIFEST_DUMP.txt
           grep -q 'android.permission.CAMERA' dist-2108/MANIFEST_DUMP.txt
           grep -q 'android.permission.TRANSMIT_IR' dist-2108/MANIFEST_DUMP.txt
           grep -q 'android.permission.BLUETOOTH_SCAN' dist-2108/MANIFEST_DUMP.txt
           grep -q 'android.permission.BLUETOOTH_CONNECT' dist-2108/MANIFEST_DUMP.txt
+          grep -q 'CameraLiveActivity' dist-2108/MANIFEST_DUMP.txt
           sha256sum "$OUT" | tee dist-2108/SHA256.txt
           ls -lh "$OUT"
 
@@ -102,7 +103,6 @@ jobs:
           APK='dist-2108/MUBEL_KANTAR_2.10.8_STABIL_KAMERA_CANLI_WIFI_BT_IR.apk'
           PKG='com.mubel.kantar.v2108camera'
           MAIN='com.mubel.kantar.MainActivity'
-          CAM='com.mubel.kantar.CameraLiveActivity'
           REPORT='dist-2108/SMOKE_REPORT.txt'
           echo '=== INSTALL ===' > "$REPORT"
           adb install -r "$APK" | tee -a "$REPORT"
@@ -116,13 +116,18 @@ jobs:
           test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
           if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
           adb exec-out screencap -p > dist-2108/SCREEN_MAIN.png
-          echo '=== CAMERA ACTIVITY LAUNCH ===' | tee -a "$REPORT"
+
+          echo '=== CAMERA ACTIVITY VIA MAIN ===' | tee -a "$REPORT"
           adb logcat -c
-          adb shell run-as "$PKG" am start -W -n "$PKG/$CAM" | tee -a "$REPORT"
-          sleep 7
+          adb shell am force-stop "$PKG"
+          adb shell am start -W -n "$PKG/$MAIN" --ez mubel_smoke_camera true | tee -a "$REPORT"
+          sleep 9
           test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
+          adb shell dumpsys activity activities | grep 'CameraLiveActivity' | head -5 | tee -a "$REPORT"
+          adb shell dumpsys activity activities | grep -q 'CameraLiveActivity'
           if adb logcat -d | grep -q 'FATAL EXCEPTION'; then adb logcat -d >> "$REPORT"; exit 1; fi
           adb exec-out screencap -p > dist-2108/SCREEN_CAMERA.png
+
           echo '=== MAIN LAUNCH 2 ===' | tee -a "$REPORT"
           adb shell am force-stop "$PKG"
           adb logcat -c
