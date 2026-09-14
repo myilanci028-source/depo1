@@ -50,13 +50,20 @@ def patch_app(s):
     return s.replace(old,new)
 rw(Path('app/src/main/assets/app.js'), patch_app)
 
-# MainActivity: add launch bridge and receive chosen stable camera kg.
+# MainActivity: add launch bridge, receive stable camera kg and an internal test-only launch extra.
 def patch_main(s):
     s=s.replace('private static final int REQ_LOGO = 1101;', 'private static final int REQ_LOGO = 1101;\n    private static final int REQ_CAMERA = 1102;')
+
+    create_marker='        handleTransferIntent(getIntent());\n    }'
+    create_new='        handleTransferIntent(getIntent());\n        // Internal CI smoke path: MainActivity itself launches the non-exported camera screen.\n        // Normal users never see or trigger this unless the explicit intent extra is supplied.\n        if (getIntent() != null && getIntent().getBooleanExtra("mubel_smoke_camera", false)) {\n            ui.postDelayed(() -> {\n                try { startActivityForResult(new Intent(MainActivity.this, CameraLiveActivity.class), REQ_CAMERA); }\n                catch (Exception e) { toast("Kamera açılamadı: "+safe(e)); }\n            }, 700);\n        }\n    }'
+    if create_marker not in s: raise SystemExit('onCreate marker not found')
+    s=s.replace(create_marker, create_new, 1)
+
     old='        @JavascriptInterface public void pickLogo() { runOnUiThread(() -> {\n            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("image/*"); startActivityForResult(i, REQ_LOGO);\n        }); }'
     new='        @JavascriptInterface public void startCameraLive() { runOnUiThread(() -> { try { startActivityForResult(new Intent(MainActivity.this, CameraLiveActivity.class), REQ_CAMERA); } catch (Exception e) { toast("Kamera açılamadı: "+safe(e)); } }); }\n'+old
     if old not in s: raise SystemExit('AndroidBridge logo marker not found')
     s=s.replace(old,new)
+
     old2='        if (requestCode != REQ_LOGO || resultCode != RESULT_OK || data == null || data.getData() == null) return;\n        Uri u=data.getData();'
     new2='        if (requestCode == REQ_CAMERA) {\n            if (resultCode == RESULT_OK && data != null && data.hasExtra("kg")) {\n                double kg=data.getDoubleExtra("kg", Double.NaN);\n                if (!Double.isNaN(kg)) js("window.MUBEL&&MUBEL.cameraWeight("+kg+","+q("KAMERA OCR")+");");\n            }\n            return;\n        }\n        if (requestCode != REQ_LOGO || resultCode != RESULT_OK || data == null || data.getData() == null) return;\n        Uri u=data.getData();'
     if old2 not in s: raise SystemExit('onActivityResult marker not found')
