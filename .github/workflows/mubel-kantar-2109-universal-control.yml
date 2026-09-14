@@ -84,7 +84,7 @@ jobs:
           "$SDK/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
           test -x "$SDK/build-tools/36.0.0/aapt2"
           "$SDK/build-tools/36.0.0/aapt2" version
-          adb version
+          "$SDK/platform-tools/adb" version
 
       - uses: gradle/actions/setup-gradle@v4
         with:
