@@ -1,0 +1,76 @@
+name: MUBEL KANTAR 2.10.11 STABIL KUMANDA OGRET APK
+on:
+  push:
+    branches: [mubel-kantar-2111-kumanda-ogret]
+    paths:
+      - 'mubel-kantar-2111/**'
+      - '.github/workflows/mubel-kantar-2111.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build workspace preserving stable layers
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='extracted-2107/mubel_stable_triple'
+          rm -rf build-2111 dist-2111
+          cp -a "$BASE" build-2111
+          python3 mubel-kantar-2108/patch_2108.py build-2111 mubel-kantar-2108
+          python3 mubel-kantar-2109/patch_2109.py build-2111 mubel-kantar-2109
+          python3 mubel-kantar-2111/patch_2111.py build-2111 mubel-kantar-2111
+          node --check build-2111/app/src/main/assets/v2107.js
+          node --check build-2111/app/src/main/assets/v2108.js
+          node --check build-2111/app/src/main/assets/v2109.js
+          node --check build-2111/app/src/main/assets/v2111.js
+          mkdir -p dist-2111
+          cat >> build-2111/app/build.gradle <<'EOF'
+          android { packaging { resources { excludes += ['META-INF/LICENSE.md','META-INF/LICENSE.txt','META-INF/NOTICE.md','META-INF/NOTICE.txt'] } } }
+          EOF
+      - name: Android SDK 36
+        shell: bash
+        run: |
+          SDK='/usr/local/lib/android/sdk'
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Compile real APK
+        working-directory: build-2111
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Verify install package
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='build-2111/app/build/outputs/apk/debug/app-debug.apk'
+          OUT='dist-2111/MUBEL_KANTAR_2.10.11_STABIL_KUMANDA_OGRET.apk'
+          test -s "$APK"; cp "$APK" "$OUT"; unzip -t "$OUT"
+          $ANDROID_HOME/build-tools/36.0.0/aapt2 dump badging "$OUT" > dist-2111/BADGING.txt
+          grep -q "package: name='com.mubel.kantar.v2111learn'" dist-2111/BADGING.txt
+          grep -q "versionCode='2111'" dist-2111/BADGING.txt
+          unzip -l "$OUT" > dist-2111/CONTENTS.txt
+          grep -q 'assets/v2107.js' dist-2111/CONTENTS.txt
+          grep -q 'assets/v2108.js' dist-2111/CONTENTS.txt
+          grep -q 'assets/v2109.js' dist-2111/CONTENTS.txt
+          grep -q 'assets/v2111.js' dist-2111/CONTENTS.txt
+          $ANDROID_HOME/build-tools/36.0.0/apksigner verify --verbose --print-certs "$OUT" > dist-2111/SIGNATURE.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' dist-2111/SIGNATURE.txt
+          sha256sum "$OUT" > dist-2111/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_2.10.11_STABIL_KUMANDA_OGRET
+          path: dist-2111/
+          if-no-files-found: error
+          retention-days: 30
