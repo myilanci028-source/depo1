@@ -1,0 +1,65 @@
+name: MUBEL KANTAR 2.10.12 CAMERA BOOST APK
+on:
+  push:
+    branches: [mubel-kantar-2112-camera-boost]
+    paths:
+      - 'mubel-kantar-2112/**'
+      - '.github/workflows/mubel-kantar-2112.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - name: Build workspace preserving 2.10.11
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build-2112 dist-2112
+          cp -a extracted-2107/mubel_stable_triple build-2112
+          python3 mubel-kantar-2108/patch_2108.py build-2112 mubel-kantar-2108
+          python3 mubel-kantar-2109/patch_2109.py build-2112 mubel-kantar-2109
+          python3 mubel-kantar-2111/patch_2111.py build-2112 mubel-kantar-2111
+          python3 mubel-kantar-2112/patch_2112.py build-2112
+          node --check build-2112/app/src/main/assets/v2111.js
+          mkdir -p dist-2112
+          cat >> build-2112/app/build.gradle <<'EOF'
+          android { packaging { resources { excludes += ['META-INF/LICENSE.md','META-INF/LICENSE.txt','META-INF/NOTICE.md','META-INF/NOTICE.txt'] } } }
+          EOF
+      - name: Android SDK 36
+        shell: bash
+        run: |
+          SDK='/usr/local/lib/android/sdk'
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.10.2'}
+      - name: Compile APK
+        working-directory: build-2112
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='build-2112/app/build/outputs/apk/debug/app-debug.apk'
+          OUT='dist-2112/MUBEL_KANTAR_2.10.12_CAMERA_BOOST_STABIL.apk'
+          test -s "$APK"; cp "$APK" "$OUT"; unzip -t "$OUT"
+          $ANDROID_HOME/build-tools/36.0.0/aapt2 dump badging "$OUT" > dist-2112/BADGING.txt
+          grep -q "package: name='com.mubel.kantar.v2112camera'" dist-2112/BADGING.txt
+          grep -q "versionCode='2112'" dist-2112/BADGING.txt
+          $ANDROID_HOME/build-tools/36.0.0/apksigner verify --verbose --print-certs "$OUT" > dist-2112/SIGNATURE.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' dist-2112/SIGNATURE.txt
+          sha256sum "$OUT" > dist-2112/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_KANTAR_2.10.12_CAMERA_BOOST_STABIL
+          path: dist-2112/
+          if-no-files-found: error
+          retention-days: 30
