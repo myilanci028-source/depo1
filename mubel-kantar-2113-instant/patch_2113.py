@@ -150,3 +150,16 @@ print('PATCH_2113_INSTANT_OK')
 # screen-lock build trigger
 
 # rebuild-screenlock
+
+# FINAL 2.10.13 camera gate: replace the exact 2.10.12 OCR entry point.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+old='''Bitmap boosted = redLedBoost(composite);\n            InputImage img = InputImage.fromBitmap(boosted,0);\n            final Bitmap fFrame=frame, fCrop=crop, fComposite=composite, fBoosted=boosted;'''
+new='''Bitmap boosted = redLedBoost(composite);\n            final String direct = decodeSevenSegmentInstant(composite);\n            if (direct != null) {\n                main.post(() -> { try { pushInstantSegment(Double.parseDouble(direct), direct); } catch(Exception ignored) {} });\n            } else {\n                main.post(() -> { stateText.setText("KANTAR EKRANI ARANIYOR"); weightText.setText("-- kg"); detailText.setText("Gerçek LED rakam görülmeden değer üretilmez."); latestStable=null; lastSeg=null; segHits=0; });\n            }\n            try{boosted.recycle();}catch(Exception ignored){}\n            try{composite.recycle();}catch(Exception ignored){}\n            try{crop.recycle();}catch(Exception ignored){}\n            try{frame.recycle();}catch(Exception ignored){}\n            processing=false; return;'''
+if old not in s: raise SystemExit('FINAL camera entry marker missing')
+s=s.replace(old,new,1)
+# Sunlight can turn red LEDs yellow/orange. Accept bright warm active segments, not the dull red LCD background.
+s=s.replace('return r>185 && r>g*1.45 && r>bl*1.30 && r-Math.max(g,bl)>55;', 'return (r>185 && r>g*1.35 && r>bl*1.25 && r-Math.max(g,bl)>42) || (r>205 && g>125 && bl<145 && r-bl>70 && g-bl>28);')
+s=s.replace('50 Hz anti-flicker + EKRAN DOĞRULAMA + ANLIK 7-segment aktif.','50 Hz anti-flicker + SADECE GERÇEK LED + ANLIK 7-segment aktif.')
+p.write_text(s,encoding='utf-8')
+print('FINAL_SCREEN_GATE_OK')
