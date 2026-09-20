@@ -531,7 +531,7 @@ p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
 s=p.read_text(encoding='utf-8')
 # Replace sample voting with hysteresis lock: acquire fast, release/change only on sustained new value.
 a=s.index('    private void pushSample(')
-b=s.index('    private void analyzeFrame()',a)
+b=s.index('    private void scan()',a)
 if a<0 or b<0: raise SystemExit('pushSample bounds missing')
 lock=r'''    private Double lockedKg=null, pendingKg=null;
     private int pendingHits=0, lostHits=0;
