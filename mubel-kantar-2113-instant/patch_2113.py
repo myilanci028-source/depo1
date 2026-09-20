@@ -6,7 +6,7 @@ s=s.replace('private static final long OCR_PERIOD_MS = 120;','private static fin
 needle='''Bitmap boosted = redLedBoost(composite);
             InputImage img = InputImage.fromBitmap(boosted,0);'''
 repl='''Bitmap boosted = redLedBoost(composite);
-            final String segValue = decodeSevenSegmentInstant(composite);
+            final String segValue = hasRealLedDisplay(composite) ? decodeSevenSegmentInstant(composite) : null;
             if (segValue != null) {
                 main.post(() -> {
                     try { pushInstantSegment(Double.parseDouble(segValue), segValue); } catch(Exception ignored) {}
@@ -17,7 +17,14 @@ repl='''Bitmap boosted = redLedBoost(composite);
 if needle not in s: raise SystemExit('needle missing')
 s=s.replace(needle,repl,1)
 marker='''    private Bitmap redLedBoost(Bitmap src) {'''
-methods=r'''    private String lastSeg=null; private int segHits=0;
+methods=r'''    private boolean hasRealLedDisplay(Bitmap b){
+        int w=b.getWidth(),h=b.getHeight(), red=0,minX=w,maxX=-1,minY=h,maxY=-1;
+        for(int y=0;y<h;y+=3) for(int x=0;x<w;x+=3) if(isRed(b,x,y)){red++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
+        if(red<18||maxX<0)return false;
+        int bw=maxX-minX+1,bh=maxY-minY+1;
+        return bw>w*0.06 && bh>h*0.025 && bw>bh*0.35;
+    }
+    private String lastSeg=null; private int segHits=0;
     private void pushInstantSegment(double kg,String raw){
         String k=String.valueOf(Math.round(kg*10.0)/10.0);
         if(raw.equals(lastSeg)) segHits++; else { lastSeg=raw; segHits=1; }
@@ -103,7 +110,7 @@ methods=r'''    private String lastSeg=null; private int segHits=0;
 '''
 if marker not in s: raise SystemExit('marker missing')
 s=s.replace(marker,methods+marker,1)
-s=s.replace('50 Hz anti-flicker + hızlı çok-kare + kırmızı 7-segment güçlendirme aktif.','50 Hz anti-flicker + ANLIK 7-segment okuma + OCR yedek aktif.')
+s=s.replace('50 Hz anti-flicker + hızlı çok-kare + kırmızı 7-segment güçlendirme aktif.','50 Hz anti-flicker + EKRAN DOĞRULAMA + ANLIK 7-segment aktif.')
 p.write_text(s,encoding='utf-8')
 g=root/'app/build.gradle';x=g.read_text(encoding='utf-8')
 x=x.replace("applicationId 'com.mubel.kantar.v2112camera'","applicationId 'com.mubel.kantar.v2113instant'")
