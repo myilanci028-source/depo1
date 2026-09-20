@@ -550,21 +550,21 @@ lock=r'''    private Double lockedKg=null, pendingKg=null;
             if(pendingKg!=null && Math.abs(pendingKg-v)<0.1) pendingHits++; else {pendingKg=v;pendingHits=1;}
             if(pendingHits>=2){
                 lockedKg=v; pendingKg=null; pendingHits=0;
-                runOnUiThread(()->{valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg));statusText.setText("SABİT · KİLİTLİ");detailText.setText("Ekran değeri sabitlendi");});
+                runOnUiThread(()->{weightText.setText(String.format(Locale.US,"%.0f kg",lockedKg));stateText.setText("SABİT · KİLİTLİ");detailText.setText("Ekran değeri sabitlendi");});
             }
             return;
         }
         if(Math.abs(lockedKg-v)<0.1){
             pendingKg=null; pendingHits=0;
-            runOnUiThread(()->{valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg));statusText.setText("SABİT · KİLİTLİ");detailText.setText("Geçici okumalar kilidi bozamaz");});
+            runOnUiThread(()->{weightText.setText(String.format(Locale.US,"%.0f kg",lockedKg));stateText.setText("SABİT · KİLİTLİ");detailText.setText("Geçici okumalar kilidi bozamaz");});
             return;
         }
         if(pendingKg!=null && Math.abs(pendingKg-v)<0.1) pendingHits++; else {pendingKg=v;pendingHits=1;}
         if(pendingHits>=5){
             lockedKg=v; pendingKg=null; pendingHits=0;
-            runOnUiThread(()->{valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg));statusText.setText("YENİ DEĞER · KİLİTLİ");detailText.setText("Yeni değer doğrulandı");});
+            runOnUiThread(()->{weightText.setText(String.format(Locale.US,"%.0f kg",lockedKg));stateText.setText("YENİ DEĞER · KİLİTLİ");detailText.setText("Yeni değer doğrulandı");});
         } else {
-            runOnUiThread(()->{valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg));statusText.setText("SABİT · DOĞRULANIYOR");detailText.setText("Geçici farklı okumalar gösterilmez");});
+            runOnUiThread(()->{weightText.setText(String.format(Locale.US,"%.0f kg",lockedKg));stateText.setText("SABİT · DOĞRULANIYOR");detailText.setText("Geçici farklı okumalar gösterilmez");});
         }
     }'''
 s=s[:a]+lock+s[end:]
@@ -573,3 +573,5 @@ p.write_text(s,encoding='utf-8')
 print('STABLE_LOCK_V7_OK')
 
 # stable-lock-v7-final-build
+
+# v7-ui-name-fix-build
