@@ -418,3 +418,5 @@ s=s[:a]+strict+s[b:]
 s=s.replace('50 Hz anti-flicker + EKRAN ÇERÇEVESİ KİLİTLİ + 7-segment aktif.','50 Hz anti-flicker + AGRESİF OLMAYAN LED OKUMA + ZOOM aktif.')
 p.write_text(s,encoding='utf-8')
 print('STRICT_LED_ZOOM_OK')
+
+# rebuild zoom
