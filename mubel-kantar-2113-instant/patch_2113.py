@@ -257,3 +257,10 @@ s=s[:start]+v2+s[end:]
 s=s.replace('50 Hz anti-flicker + SADECE GERÇEK LED + ANLIK 7-segment aktif.','50 Hz anti-flicker + FOTO-TESTLİ LED OKUMA + ANLIK 7-segment aktif.')
 p.write_text(s,encoding='utf-8')
 print('PHOTO_TESTED_DECODER_V2_OK')
+
+# Keep adjacent digits separate: only bridge tiny threshold holes inside one emitted digit.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+s=s.replace('if(gap<=Math.max(12,(int)(hh*0.28))) ge=b[1];','if(gap<=Math.max(4,(int)(hh*0.055))) ge=b[1];')
+p.write_text(s,encoding='utf-8')
+print('DIGIT_GAP_FIX_OK')
