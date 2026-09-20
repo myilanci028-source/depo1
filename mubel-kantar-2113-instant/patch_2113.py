@@ -575,3 +575,49 @@ print('STABLE_LOCK_V7_OK')
 # stable-lock-v7-final-build
 
 # v7-ui-name-fix-build
+
+# 2.10.13 V8 - ONE READER ONLY: direct 7-segment owns the weight. OCR may not publish/lock a number.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+# Route every direct decoder result through the stable-lock gate.
+s=s.replace('pushInstantSegment(Double.parseDouble(segValue), segValue)','pushSample(Double.parseDouble(segValue), segValue)')
+s=s.replace('pushInstantSegment(Double.parseDouble(direct), direct)','pushSample(Double.parseDouble(direct), direct)')
+# Disable OCR text handler completely; it was able to lock 1 while the physical display showed 2.
+needle='    private void handleText('
+if needle in s:
+    a=s.index(needle); brace=s.index('{',a); depth=0; end=-1
+    for i in range(brace,len(s)):
+        if s[i]=='{': depth+=1
+        elif s[i]=='}':
+            depth-=1
+            if depth==0: end=i+1; break
+    sig=s[a:brace]
+    s=s[:a]+sig+'{ /* V8: OCR MUST NEVER publish a scale value. Direct 7-segment only. */ }'+s[end:]
+# Remove fuzzy one-segment guessing: exact masks only. A wrong digit must never be invented.
+s=s.replace('return dist==1 && mx>.025 ? best : -1;','return -1;')
+# If a valid number exists it must be one contiguous right-aligned block; blank cells only on the left.
+old="""        StringBuilder out=new StringBuilder();
+        final int slots=5;
+        for(int i=0;i<slots;i++){
+            int x0=ix0+(int)(iw*(i/(double)slots)),x1=ix0+(int)(iw*((i+1)/(double)slots));
+            int d=decodeDigitDual(src,x0,iy0,x1,iy1);
+            if(d>=0)out.append((char)('0'+d));
+        }
+        return out.length()==0?null:out.toString();"""
+new="""        StringBuilder out=new StringBuilder();
+        final int slots=5; boolean started=false, gap=false;
+        for(int i=0;i<slots;i++){
+            int x0=ix0+(int)(iw*(i/(double)slots)),x1=ix0+(int)(iw*((i+1)/(double)slots));
+            int d=decodeDigitDual(src,x0,iy0,x1,iy1);
+            if(d>=0){
+                if(gap) return null;
+                started=true; out.append((char)('0'+d));
+            } else if(started) gap=true;
+        }
+        return out.length()==0?null:out.toString();"""
+if old in s: s=s.replace(old,new,1)
+s=s.replace('50 Hz anti-flicker + GÜNEŞ/GÖLGE + 5 HANE + AKILLI SABİTLEME aktif.','50 Hz + 5 HANE + DOĞRUDAN 7-SEGMENT + AKILLI SABİTLEME aktif.')
+p.write_text(s,encoding='utf-8')
+print('V8_DIRECT_ONLY_OK')
+
+# v8-direct-only-build
