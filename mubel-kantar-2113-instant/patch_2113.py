@@ -420,3 +420,29 @@ p.write_text(s,encoding='utf-8')
 print('STRICT_LED_ZOOM_OK')
 
 # rebuild zoom
+
+# 2.10.13 ACTIVE-EMISSION v4: tuned against uploaded 4 kg frame; read up to five lit digits, right-aligned.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+# Make active LED predicate discriminate emitted yellow/red light from dim ghost outlines.
+a=s.index('    private boolean isRed(Bitmap b,int x,int y){')
+b=s.index('    private String decodeSevenSegmentInstant(Bitmap src){',a)
+pred=r'''    private boolean isRed(Bitmap b,int x,int y){
+        if(x<0||y<0||x>=b.getWidth()||y>=b.getHeight()) return false;
+        int c=b.getPixel(x,y),r=Color.red(c),g=Color.green(c),bl=Color.blue(c);
+        int mx=Math.max(g,bl);
+        // Sunlight: emitted red LED is captured as bright yellow/orange.
+        boolean sun = r>=215 && g>=135 && bl<=145 && (r-bl)>=65 && (g-bl)>=18;
+        // Shade/indoor: emitted LED remains saturated red.
+        boolean red = r>=205 && (r-mx)>=85 && bl<=135;
+        return sun || red;
+    }
+'''
+s=s[:a]+pred+s[b:]
+# Replace strict digit thresholds with narrow-bar-friendly sampling.
+s=s.replace('if(mx<.10)return -1;', 'if(mx<.018)return -1;')
+s=s.replace('double th=Math.max(.075,mx*.42);', 'double th=Math.max(.012,mx*.30);')
+# Ensure no fuzzy matching remains and expose useful status.
+s=s.replace('50 Hz anti-flicker + AGRESİF OLMAYAN LED OKUMA + ZOOM aktif.','50 Hz anti-flicker + AKTİF LED IŞIĞI + 5 HANE + ZOOM aktif.')
+p.write_text(s,encoding='utf-8')
+print('ACTIVE_EMISSION_V4_OK')
