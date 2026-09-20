@@ -323,3 +323,5 @@ s=s[:a]+v3+s[b:]
 s=s.replace('50 Hz anti-flicker + FOTO-TESTLİ LED OKUMA + ANLIK 7-segment aktif.','50 Hz anti-flicker + EKRAN ÇERÇEVESİ KİLİTLİ + 7-segment aktif.')
 p.write_text(s,encoding='utf-8')
 print('DISPLAY_FRAME_DECODER_V3_OK')
+
+# display-frame-v3-build
