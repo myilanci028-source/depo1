@@ -23,7 +23,8 @@ repl='''Bitmap boosted = redLedBoost(composite);
                 boosted.recycle(); composite.recycle(); crop.recycle(); frame.recycle(); processing=false; return;
             }
             InputImage img = InputImage.fromBitmap(boosted,0);'''
-if needle in s:\n    s=s.replace(needle,repl,1)
+if needle in s:
+    s=s.replace(needle,repl,1)
 marker='''    private Bitmap redLedBoost(Bitmap src) {'''
 methods=r'''    private boolean hasRealLedDisplay(Bitmap b){
         int w=b.getWidth(),h=b.getHeight(), red=0,minX=w,maxX=-1,minY=h,maxY=-1;
