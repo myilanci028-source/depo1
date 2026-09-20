@@ -526,56 +526,48 @@ print('DUAL_LIGHT_V5_OK')
 
 # dual-light-v5-build
 
-# 2.10.13 STABLE-LOCK v6: once a real value repeats, lock it; reject transient ghost expansions.
+
+# 2.10.13 STABLE-LOCK v7 - robust patch: locate pushSample method by braces, independent of following method name.
 p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
 s=p.read_text(encoding='utf-8')
-# Replace sample voting with hysteresis lock: acquire fast, release/change only on sustained new value.
-a=s.index('    private void pushSample(')
-b=s.index('    private void startCamera()',a)
-if a<0 or b<0: raise SystemExit('pushSample bounds missing')
+needle='    private void pushSample('
+a=s.index(needle)
+brace=s.index('{',a)
+depth=0; end=-1
+for i in range(brace,len(s)):
+    if s[i]=='{': depth+=1
+    elif s[i]=='}':
+        depth-=1
+        if depth==0:
+            end=i+1; break
+if end<0: raise SystemExit('pushSample method end missing')
 lock=r'''    private Double lockedKg=null, pendingKg=null;
-    private int pendingHits=0, lostHits=0;
-    private long lastLockMs=0;
-
+    private int pendingHits=0;
     private void pushSample(double value,String raw){
         if(value<0 || value>99999) return;
-        double v=Math.rint(value); // crane display is integer kg
-        long now=System.currentTimeMillis();
-
+        final double v=Math.rint(value);
         if(lockedKg==null){
             if(pendingKg!=null && Math.abs(pendingKg-v)<0.1) pendingHits++; else {pendingKg=v;pendingHits=1;}
-            // Acquire quickly: same real display value in 2 observations.
             if(pendingHits>=2){
-                lockedKg=v; lastLockMs=now; lostHits=0; pendingKg=null; pendingHits=0;
-                runOnUiThread(()->{ valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg)); statusText.setText("SABİT · KİLİTLENDİ"); detailText.setText("Ekran değeri sabitlendi"); });
+                lockedKg=v; pendingKg=null; pendingHits=0;
+                runOnUiThread(()->{valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg));statusText.setText("SABİT · KİLİTLİ");detailText.setText("Ekran değeri sabitlendi");});
             }
             return;
         }
-
         if(Math.abs(lockedKg-v)<0.1){
-            lastLockMs=now; lostHits=0; pendingKg=null; pendingHits=0;
-            runOnUiThread(()->{ valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg)); statusText.setText("SABİT · KİLİTLİ"); });
+            pendingKg=null; pendingHits=0;
+            runOnUiThread(()->{valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg));statusText.setText("SABİT · KİLİTLİ");detailText.setText("Geçici okumalar kilidi bozamaz");});
             return;
         }
-
-        // Different reading: do NOT jump. Require the same new value 5 times.
         if(pendingKg!=null && Math.abs(pendingKg-v)<0.1) pendingHits++; else {pendingKg=v;pendingHits=1;}
         if(pendingHits>=5){
-            lockedKg=v; lastLockMs=now; lostHits=0; pendingKg=null; pendingHits=0;
-            runOnUiThread(()->{ valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg)); statusText.setText("YENİ DEĞER · KİLİTLENDİ"); detailText.setText("Yeni ekran değeri doğrulandı"); });
+            lockedKg=v; pendingKg=null; pendingHits=0;
+            runOnUiThread(()->{valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg));statusText.setText("YENİ DEĞER · KİLİTLİ");detailText.setText("Yeni değer doğrulandı");});
         } else {
-            runOnUiThread(()->{ valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg)); statusText.setText("SABİT · DOĞRULANIYOR"); detailText.setText("Geçici okumalar kilidi bozamaz"); });
+            runOnUiThread(()->{valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg));statusText.setText("SABİT · DOĞRULANIYOR");detailText.setText("Geçici farklı okumalar gösterilmez");});
         }
-    }
-
-'''
-s=s[:a]+lock+s[b:]
+    }'''
+s=s[:a]+lock+s[end:]
 s=s.replace('50 Hz anti-flicker + GÜNEŞ/GÖLGE LED + 5 HANE + ZOOM aktif.','50 Hz anti-flicker + GÜNEŞ/GÖLGE + 5 HANE + AKILLI SABİTLEME aktif.')
 p.write_text(s,encoding='utf-8')
-print('STABLE_LOCK_V6_OK')
-
-# stable-lock-v6-build
-
-# stable-lock-v6-rebuild
-
-# stable-lock-v6-rebuild-2
+print('STABLE_LOCK_V7_OK')
