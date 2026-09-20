@@ -749,3 +749,54 @@ p.write_text(s,encoding='utf-8')
 print('V10_MOTION_ROBUST_OK')
 
 # v10-motion-robust-build
+
+# 2.10.13 V11 - FULL DISPLAY BAND decoder. Handles 1..5 right-aligned digits and camera angle by locating a horizontal LED band first.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+a=s.index('    private String decodeSevenSegmentInstant(Bitmap src){')
+b=s.index('    private int decodeDigitDual(',a)
+v11=r'''    private String decodeSevenSegmentInstant(Bitmap src){
+        int w=src.getWidth(),h=src.getHeight();
+        // Find horizontal band with maximum active LED energy. Indicator lamps are narrow and cannot win width test.
+        int bestY=-1,bestScore=0,bestL=0,bestR=0;
+        for(int cy=(int)(h*.12);cy<(int)(h*.82);cy+=4){
+            int hh=Math.max(12,h/22), y0=Math.max(0,cy-hh),y1=Math.min(h-1,cy+hh);
+            int l=w,r=-1,n=0;
+            for(int y=y0;y<=y1;y+=3)for(int x=(int)(w*.05);x<(int)(w*.95);x+=3)if(isRed(src,x,y)){l=Math.min(l,x);r=Math.max(r,x);n++;}
+            if(r>l){
+                int span=r-l, score=n+span/3;
+                if(span>w*.045 && score>bestScore){bestScore=score;bestY=cy;bestL=l;bestR=r;}
+            }
+        }
+        if(bestY<0)return null;
+        int bandH=Math.max(26,h/9), y0=Math.max(0,bestY-bandH/2),y1=Math.min(h,bestY+bandH/2);
+        // Derive digit height from active pixels in band.
+        int ay0=y1,ay1=y0;
+        for(int y=y0;y<y1;y+=2)for(int x=Math.max(0,bestL-h/8);x<Math.min(w,bestR+h/8);x+=2)if(isRed(src,x,y)){ay0=Math.min(ay0,y);ay1=Math.max(ay1,y);}
+        if(ay1-ay0<18)return null;
+        int dh=ay1-ay0+1; double pitch=dh*.60;
+        // Rightmost active digit is units; use its right edge and evaluate five cells to the left.
+        int right=Math.min(w,bestR+(int)(pitch*.20));
+        int panelW=(int)(5*pitch), left=Math.max(0,right-panelW);
+        int top=Math.max(0,ay0-(int)(dh*.06)),bot=Math.min(h,ay1+(int)(dh*.06));
+        int[] d=new int[5];
+        for(int i=0;i<5;i++){
+            int x0=left+(int)(panelW*i/5.0),x1=left+(int)(panelW*(i+1)/5.0);
+            d[i]=decodeDigitDual(src,x0,top,x1,bot);
+        }
+        int first=0;while(first<5&&d[first]<0)first++;
+        if(first==5)return null;
+        // Real display values are contiguous to the units cell.
+        for(int i=first;i<5;i++)if(d[i]<0)return null;
+        StringBuilder out=new StringBuilder();for(int i=first;i<5;i++)out.append((char)('0'+d[i]));
+        return out.toString();
+    }
+'''
+s=s[:a]+v11+s[b:]
+# exact segment masks only, but lower relative threshold because oblique views attenuate one side.
+s=s.replace('double th=Math.max(.007,mx*.24);','double th=Math.max(.005,mx*.18);')
+s=s.replace('50 Hz + HAREKETLİ EKRAN + DOĞRUDAN 7-SEGMENT aktif.','50 Hz + TAM EKRAN BANDI + 1-5 HANE 7-SEGMENT aktif.')
+p.write_text(s,encoding='utf-8')
+print('V11_FULL_BAND_OK')
+
+# v11-full-band-build
