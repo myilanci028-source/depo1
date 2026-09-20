@@ -11,7 +11,7 @@ repl='''Bitmap boosted = redLedBoost(composite);
                 main.post(() -> {
                     try { pushInstantSegment(Double.parseDouble(segValue), segValue); } catch(Exception ignored) {}
                 });
-                boosted.recycle(); return;
+                boosted.recycle(); composite.recycle(); crop.recycle(); frame.recycle(); processing=false; return;
             }
             InputImage img = InputImage.fromBitmap(boosted,0);'''
 if needle not in s: raise SystemExit('needle missing')
@@ -35,7 +35,7 @@ methods=r'''    private String lastSeg=null; private int segHits=0;
     private boolean isRed(Bitmap b,int x,int y){
         if(x<0||y<0||x>=b.getWidth()||y>=b.getHeight()) return false;
         int c=b.getPixel(x,y),r=Color.red(c),g=Color.green(c),bl=Color.blue(c);
-        return r>95 && r>g*1.22 && r>bl*1.12 && r-Math.max(g,bl)>22;
+        return r>185 && r>g*1.45 && r>bl*1.30 && r-Math.max(g,bl)>55;
     }
     private String decodeSevenSegmentInstant(Bitmap src){
         int w=src.getWidth(),h=src.getHeight();
@@ -44,7 +44,7 @@ methods=r'''    private String lastSeg=null; private int segHits=0;
         for(int y=0;y<h;y+=2) for(int x=0;x<w;x+=2) if(isRed(src,x,y)) rows[y]++;
         int bestY=-1,best=0;
         for(int y=0;y<h;y+=2){int z=0;for(int yy=Math.max(0,y-h/14);yy<=Math.min(h-1,y+h/14);yy+=2)z+=rows[yy];if(z>best){best=z;bestY=y;}}
-        if(bestY<0||best<25)return null;
+        if(bestY<0||best<12)return null;
         int y0=Math.max(0,bestY-h/7),y1=Math.min(h-1,bestY+h/7);
         int[] col=new int[w];
         for(int x=0;x<w;x+=2)for(int y=y0;y<=y1;y+=2)if(isRed(src,x,y))col[x]++;
@@ -74,7 +74,7 @@ methods=r'''    private String lastSeg=null; private int segHits=0;
             // vertical extent per digit, so an isolated TARE lamp cannot stretch digit geometry
             int dy0=y1,dy1=y0,cnt=0;
             for(int y=y0;y<=y1;y+=2)for(int x=dx0;x<=dx1;x+=2)if(isRed(src,x,y)){dy0=Math.min(dy0,y);dy1=Math.max(dy1,y);cnt++;}
-            if(cnt<8||dy1-dy0<10)continue;
+            if(cnt<5||dy1-dy0<8)continue;
             int val=decodeDigitFlexible(src,dx0,dy0,dx1,dy1);
             if(val<0)return null; out.append((char)('0'+val));
         }
@@ -83,7 +83,7 @@ methods=r'''    private String lastSeg=null; private int segHits=0;
     private int decodeDigitFlexible(Bitmap b,int x0,int y0,int x1,int y1){
         int w=Math.max(1,x1-x0),h=Math.max(1,y1-y0);
         boolean[] q=new boolean[7];
-        q[0]=redRatio2(b,x0+.12*w,y0,x0+.88*w,y0+.25*h)>.035;
+        q[0]=redRatio2(b,x0+.12*w,y0,x0+.88*w,y0+.25*h)>.025;
         q[1]=redRatio2(b,x0+.58*w,y0+.08*h,x1,y0+.50*h)>.035;
         q[2]=redRatio2(b,x0+.58*w,y0+.50*h,x1,y0+.92*h)>.035;
         q[3]=redRatio2(b,x0+.12*w,y0+.75*h,x0+.88*w,y1)>.035;
