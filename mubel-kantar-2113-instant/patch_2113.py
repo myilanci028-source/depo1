@@ -621,3 +621,66 @@ p.write_text(s,encoding='utf-8')
 print('V8_DIRECT_ONLY_OK')
 
 # v8-direct-only-build
+
+# 2.10.13 V9 - FIX PANEL GEOMETRY: local yellow bezel only; never let the yellow sticker/body expand the 5-digit panel.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+a=s.index('    private String decodeSevenSegmentInstant(Bitmap src){')
+b=s.index('    private int decodeDigitDual(',a)
+v9=r'''    private String decodeSevenSegmentInstant(Bitmap src){
+        int w=src.getWidth(),h=src.getHeight();
+        int lx=w,ly=h,rx=-1,ry=-1,active=0;
+        for(int y=(int)(h*.12);y<(int)(h*.78);y+=2)for(int x=(int)(w*.08);x<(int)(w*.92);x+=2){
+            if(isRed(src,x,y)){lx=Math.min(lx,x);rx=Math.max(rx,x);ly=Math.min(ly,y);ry=Math.max(ry,y);active++;}
+        }
+        if(active<8||rx<0)return null;
+
+        // Search bezel ONLY around the LED row. Previous global yellow bbox could include the yellow capacity sticker.
+        int sx0=Math.max(0,lx-(int)(h*.55)), sx1=Math.min(w-1,rx+(int)(h*.08));
+        int sy0=Math.max(0,ly-(int)(h*.16)), sy1=Math.min(h-1,ry+(int)(h*.16));
+        int minX=w,minY=h,maxX=-1,maxY=-1,n=0;
+        for(int y=sy0;y<=sy1;y+=2)for(int x=sx0;x<=sx1;x+=2){
+            int c=b.getPixel(x,y),r=Color.red(c),g=Color.green(c),bl=Color.blue(c);
+            boolean yellow=r>135&&g>85&&bl<150&&(r-bl)>28&&(g-bl)>8;
+            if(yellow){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);n++;}
+        }
+        int ix0,ix1,iy0,iy1;
+        if(n>12 && maxX-minX>Math.max(70,(rx-lx)*2) && maxY-minY>20 && (maxX-minX)>(maxY-minY)*2.2){
+            int fw=maxX-minX,fh=maxY-minY;
+            ix0=minX+(int)(fw*.025);ix1=maxX-(int)(fw*.025);
+            iy0=minY+(int)(fh*.08);iy1=maxY-(int)(fh*.08);
+        } else {
+            // Units digit is the rightmost cell. Derive five-cell pitch from its LED height.
+            int ah=Math.max(24,ry-ly+1);
+            double pitch=ah*.62;
+            ix1=Math.min(w,rx+(int)(pitch*.28));
+            ix0=Math.max(0,ix1-(int)(5*pitch));
+            iy0=Math.max(0,ly-(int)(ah*.08));iy1=Math.min(h,ry+(int)(ah*.08));
+        }
+        int iw=ix1-ix0,ih=iy1-iy0;if(iw<80||ih<20)return null;
+
+        int[] ds=new int[5];
+        for(int i=0;i<5;i++){
+            int x0=ix0+(int)(iw*(i/5.0)),x1=ix0+(int)(iw*((i+1)/5.0));
+            ds[i]=decodeDigitDual(src,x0,iy0,x1,iy1);
+        }
+        // Weight is a contiguous right-aligned block. No gaps, no guessed ghost leading digits.
+        int first=0;while(first<5&&ds[first]<0)first++;
+        if(first==5)return null;
+        for(int i=first;i<5;i++)if(ds[i]<0)return null;
+        StringBuilder out=new StringBuilder();for(int i=first;i<5;i++)out.append((char)('0'+ds[i]));
+        return out.toString();
+    }
+'''
+# correct accidental source variable name before writing Java
+v9=v9.replace('int c=b.getPixel(x,y)','int c=src.getPixel(x,y)')
+s=s[:a]+v9+s[b:]
+# Exact masks only: no Hamming-distance digit invention.
+old='''        int best=-1,dist=8;for(int d=0;d<10;d++){int dd=Integer.bitCount(mask^m[d]);if(dd<dist){dist=dd;best=d;}}
+        return dist==1 && mx>.025 ? best : -1;'''
+if old in s:s=s.replace(old,'        return -1;',1)
+s=s.replace('50 Hz + 5 HANE + DOĞRUDAN 7-SEGMENT + AKILLI SABİTLEME aktif.','50 Hz + 5 HANE + PANEL KİLİDİ + DOĞRUDAN 7-SEGMENT aktif.')
+p.write_text(s,encoding='utf-8')
+print('V9_PANEL_GEOMETRY_OK')
+
+# v9-panel-geometry-build
