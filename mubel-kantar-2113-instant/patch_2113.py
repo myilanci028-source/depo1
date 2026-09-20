@@ -26,10 +26,10 @@ methods=r'''    private String lastSeg=null; private int segHits=0;
             latestStable=kg;
             stateText.setText("7-SEGMENT OK");
             weightText.setText(k+" kg");
-            detail.setText("Doğrudan LED okuma: "+raw);
+            detailText.setText("Doğrudan LED okuma: "+raw);
         } else {
             stateText.setText("RAKAM DOĞRULANIYOR");
-            value.setText(k+" kg");
+            weightText.setText(k+" kg");
         }
     }
     private boolean isRed(Bitmap b,int x,int y){
