@@ -148,3 +148,5 @@ print('PATCH_2113_INSTANT_OK')
 # display-gate-build
 
 # screen-lock build trigger
+
+# rebuild-screenlock
