@@ -446,3 +446,5 @@ s=s.replace('double th=Math.max(.075,mx*.42);', 'double th=Math.max(.012,mx*.30)
 s=s.replace('50 Hz anti-flicker + AGRESİF OLMAYAN LED OKUMA + ZOOM aktif.','50 Hz anti-flicker + AKTİF LED IŞIĞI + 5 HANE + ZOOM aktif.')
 p.write_text(s,encoding='utf-8')
 print('ACTIVE_EMISSION_V4_OK')
+
+# active-emission-v4-build
