@@ -163,3 +163,7 @@ s=s.replace('return r>185 && r>g*1.45 && r>bl*1.30 && r-Math.max(g,bl)>55;', 're
 s=s.replace('50 Hz anti-flicker + EKRAN DOĞRULAMA + ANLIK 7-segment aktif.','50 Hz anti-flicker + SADECE GERÇEK LED + ANLIK 7-segment aktif.')
 p.write_text(s,encoding='utf-8')
 print('FINAL_SCREEN_GATE_OK')
+
+# OCR remains only for frame lifecycle; it must never publish a weight in 2.10.13.
+s=s.replace('processResult(text);','/* OCR result intentionally ignored: direct 7-segment only */')
+p.write_text(s,encoding='utf-8')
