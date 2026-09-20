@@ -264,3 +264,62 @@ s=p.read_text(encoding='utf-8')
 s=s.replace('if(gap<=Math.max(12,(int)(hh*0.28))) ge=b[1];','if(gap<=Math.max(4,(int)(hh*0.055))) ge=b[1];')
 p.write_text(s,encoding='utf-8')
 print('DIGIT_GAP_FIX_OK')
+
+# 2.10.13 DISPLAY-FRAME decoder v3: locate the physical yellow display frame, then read fixed digit cells.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+a=s.index('    private String decodeSevenSegmentInstant(Bitmap src){')
+b=s.index('    private int[] yRange(',a)
+if a<0 or b<0: raise SystemExit('v3 decoder bounds missing')
+v3=r'''    private String decodeSevenSegmentInstant(Bitmap src){
+        int w=src.getWidth(),h=src.getHeight();
+        // Find the yellow bezel of this crane-scale display. It gives us the true digit geometry,
+        // so dim unlit 8-shaped LCD outlines cannot move/resize the digit cells.
+        int minX=w,minY=h,maxX=-1,maxY=-1,n=0;
+        for(int y=0;y<h;y+=2)for(int x=0;x<w;x+=2){
+            int c=src.getPixel(x,y),r=Color.red(c),g=Color.green(c),bl=Color.blue(c);
+            boolean yellow=r>185 && g>135 && bl<150 && r-bl>55 && g-bl>25;
+            if(yellow){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);n++;}
+        }
+        if(n<35 || maxX-minX<w*.22 || maxY-minY<h*.08) return null;
+        int fw=maxX-minX, fh=maxY-minY;
+        // Inner red display, safely inside the yellow frame.
+        int ix0=minX+(int)(fw*.035), ix1=maxX-(int)(fw*.035);
+        int iy0=minY+(int)(fh*.075), iy1=maxY-(int)(fh*.075);
+        int iw=ix1-ix0, ih=iy1-iy0;
+        if(iw<50||ih<30)return null;
+
+        final int slots=5;
+        StringBuilder out=new StringBuilder();
+        boolean started=false;
+        for(int i=0;i<slots;i++){
+            int x0=ix0+(int)(iw*(i/(double)slots));
+            int x1=ix0+(int)(iw*((i+1)/(double)slots));
+            double activity=redRatio2(src,x0,iy0,x1,iy1);
+            if(activity<.018){ if(started){} continue; } // blank leading cells
+            int d=decodeDigitFixed(src,x0,iy0,x1,iy1);
+            if(d<0) continue;
+            started=true; out.append((char)('0'+d));
+        }
+        return out.length()>0?out.toString():null;
+    }
+    private int decodeDigitFixed(Bitmap b,int x0,int y0,int x1,int y1){
+        double w=x1-x0,h=y1-y0;
+        boolean[] q=new boolean[7];
+        q[0]=redRatio2(b,x0+.22*w,y0+.01*h,x0+.78*w,y0+.18*h)>.055;
+        q[1]=redRatio2(b,x0+.68*w,y0+.08*h,x0+.98*w,y0+.49*h)>.055;
+        q[2]=redRatio2(b,x0+.68*w,y0+.51*h,x0+.98*w,y0+.92*h)>.055;
+        q[3]=redRatio2(b,x0+.22*w,y0+.82*h,x0+.78*w,y0+.99*h)>.055;
+        q[4]=redRatio2(b,x0+.02*w,y0+.51*h,x0+.32*w,y0+.92*h)>.055;
+        q[5]=redRatio2(b,x0+.02*w,y0+.08*h,x0+.32*w,y0+.49*h)>.055;
+        q[6]=redRatio2(b,x0+.18*w,y0+.40*h,x0+.82*w,y0+.62*h)>.055;
+        int mask=0;for(int i=0;i<7;i++)if(q[i])mask|=1<<i;
+        int[] m={0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
+        int bd=8,bv=-1;for(int d=0;d<10;d++){int z=Integer.bitCount(mask^m[d]);if(z<bd){bd=z;bv=d;}}
+        return bd<=1?bv:-1;
+    }
+'''
+s=s[:a]+v3+s[b:]
+s=s.replace('50 Hz anti-flicker + FOTO-TESTLİ LED OKUMA + ANLIK 7-segment aktif.','50 Hz anti-flicker + EKRAN ÇERÇEVESİ KİLİTLİ + 7-segment aktif.')
+p.write_text(s,encoding='utf-8')
+print('DISPLAY_FRAME_DECODER_V3_OK')
