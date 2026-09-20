@@ -577,3 +577,5 @@ print('STABLE_LOCK_V6_OK')
 # stable-lock-v6-build
 
 # stable-lock-v6-rebuild
+
+# stable-lock-v6-rebuild-2
