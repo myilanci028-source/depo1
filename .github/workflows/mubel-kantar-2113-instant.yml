@@ -1,7 +1,7 @@
 name: MUBEL KANTAR 2.10.13 INSTANT CAMERA APK
 on:
   push:
-    branches: [mubel-kantar-2113-instant-camera]
+    branches: [mubel-kantar-2113-screenlock]
     paths: ['mubel-kantar-2113-instant/**','.github/workflows/mubel-kantar-2113-instant.yml']
   workflow_dispatch:
 permissions: {contents: read}
