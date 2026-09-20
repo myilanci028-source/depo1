@@ -448,3 +448,78 @@ p.write_text(s,encoding='utf-8')
 print('ACTIVE_EMISSION_V4_OK')
 
 # active-emission-v4-build
+
+# 2.10.13 DUAL-LIGHT v5: tolerate both sun-washed yellow LED and shaded red LED.
+# Screen lock is no longer dependent on one exact bezel colour: try yellow frame first, then the 5-digit panel band.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+a=s.index('    private String decodeSevenSegmentInstant(Bitmap src){')
+b=s.index('    private int[] yRange(',a)
+v5=r'''    private String decodeSevenSegmentInstant(Bitmap src){
+        int w=src.getWidth(),h=src.getHeight();
+        // Candidate active-light bounds. Works for red LED in shade and yellow/orange LED in hard sun.
+        int lx=w,ly=h,rx=-1,ry=-1,active=0;
+        for(int y=(int)(h*.08);y<(int)(h*.88);y+=2)for(int x=(int)(w*.04);x<(int)(w*.96);x+=2){
+            if(isRed(src,x,y)){lx=Math.min(lx,x);rx=Math.max(rx,x);ly=Math.min(ly,y);ry=Math.max(ry,y);active++;}
+        }
+        if(active<12 || rx<0) return null;
+
+        // Find yellow bezel when visible; it is the best five-cell reference.
+        int minX=w,minY=h,maxX=-1,maxY=-1,n=0;
+        for(int y=0;y<h;y+=2)for(int x=0;x<w;x+=2){
+            int c=src.getPixel(x,y),r=Color.red(c),g=Color.green(c),bl=Color.blue(c);
+            boolean yellow=r>170 && g>105 && bl<175 && r-bl>32 && g-bl>10;
+            if(yellow){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);n++;}
+        }
+
+        int ix0,ix1,iy0,iy1;
+        if(n>=22 && maxX-minX>w*.18 && maxY-minY>h*.055){
+            int fw=maxX-minX,fh=maxY-minY;
+            ix0=minX+(int)(fw*.025); ix1=maxX-(int)(fw*.025);
+            iy0=minY+(int)(fh*.055); iy1=maxY-(int)(fh*.055);
+        } else {
+            // Bezel lost in glare: infer the complete 5-cell band from the lit digit height/pitch.
+            int ah=Math.max(18,ry-ly), pitch=(int)(ah*.72);
+            iy0=Math.max(0,ly-(int)(ah*.08)); iy1=Math.min(h,ry+(int)(ah*.08));
+            // The crane display is right-aligned: lit units digit anchors the five-cell panel.
+            ix1=Math.min(w,rx+(int)(pitch*.22)); ix0=Math.max(0,ix1-5*pitch);
+        }
+        int iw=ix1-ix0, ih=iy1-iy0;
+        if(iw<45||ih<22)return null;
+
+        StringBuilder out=new StringBuilder();
+        final int slots=5;
+        for(int i=0;i<slots;i++){
+            int x0=ix0+(int)(iw*(i/(double)slots)),x1=ix0+(int)(iw*((i+1)/(double)slots));
+            int d=decodeDigitDual(src,x0,iy0,x1,iy1);
+            if(d>=0)out.append((char)('0'+d));
+        }
+        return out.length()==0?null:out.toString();
+    }
+    private int decodeDigitDual(Bitmap b,int x0,int y0,int x1,int y1){
+        double w=x1-x0,h=y1-y0;
+        double[] z=new double[7];
+        z[0]=redRatio2(b,x0+.18*w,y0+.00*h,x0+.82*w,y0+.20*h);
+        z[1]=redRatio2(b,x0+.62*w,y0+.05*h,x0+.99*w,y0+.50*h);
+        z[2]=redRatio2(b,x0+.62*w,y0+.50*h,x0+.99*w,y0+.95*h);
+        z[3]=redRatio2(b,x0+.18*w,y0+.80*h,x0+.82*w,y0+1.00*h);
+        z[4]=redRatio2(b,x0+.01*w,y0+.50*h,x0+.38*w,y0+.95*h);
+        z[5]=redRatio2(b,x0+.01*w,y0+.05*h,x0+.38*w,y0+.50*h);
+        z[6]=redRatio2(b,x0+.14*w,y0+.38*h,x0+.86*w,y0+.64*h);
+        double mx=0;for(double q:z)mx=Math.max(mx,q);
+        if(mx<.010)return -1;
+        // A lit segment must be significant relative to the strongest emitted segment in its own digit.
+        double th=Math.max(.007,mx*.24);
+        int mask=0,on=0;for(int i=0;i<7;i++)if(z[i]>=th){mask|=1<<i;on++;}
+        if(on<2)return -1;
+        int[] m={0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
+        // Exact first; one-segment tolerance only when that segment is borderline, never synthesize from ghost cells.
+        for(int d=0;d<10;d++)if(mask==m[d])return d;
+        int best=-1,dist=8;for(int d=0;d<10;d++){int dd=Integer.bitCount(mask^m[d]);if(dd<dist){dist=dd;best=d;}}
+        return dist==1 && mx>.025 ? best : -1;
+    }
+'''
+s=s[:a]+v5+s[b:]
+s=s.replace('50 Hz anti-flicker + AKTİF LED IŞIĞI + 5 HANE + ZOOM aktif.','50 Hz anti-flicker + GÜNEŞ/GÖLGE LED + 5 HANE + ZOOM aktif.')
+p.write_text(s,encoding='utf-8')
+print('DUAL_LIGHT_V5_OK')
