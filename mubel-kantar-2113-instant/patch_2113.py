@@ -169,3 +169,91 @@ s=s.replace('processResult(text);','/* OCR result intentionally ignored: direct 
 p.write_text(s,encoding='utf-8')
 
 # final-direct-build
+
+# 2.10.13 PHOTO-TESTED decoder v2: active-emission only; inactive red outlines are NOT digits.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+start=s.index('    private boolean isRed(Bitmap b,int x,int y){')
+end=s.index('    private Bitmap redLedBoost(Bitmap src)', start)
+if start<0 or end<0: raise SystemExit('decoder block not found')
+v2=r'''    private boolean isRed(Bitmap b,int x,int y){
+        if(x<0||y<0||x>=b.getWidth()||y>=b.getHeight()) return false;
+        int c=b.getPixel(x,y),r=Color.red(c),g=Color.green(c),bl=Color.blue(c);
+        // Active LED under sun becomes yellow/orange (green rises above blue).
+        boolean warm = r>190 && g>115 && (g-bl)>12 && (r-bl)>55;
+        // In shade an active LED is deep, very bright red. Dim inactive "8" outlines are rejected.
+        boolean deep = r>205 && g<112 && bl<112 && r-Math.max(g,bl)>100;
+        return warm || deep;
+    }
+    private String decodeSevenSegmentInstant(Bitmap src){
+        int w=src.getWidth(),h=src.getHeight();
+        int[] col=new int[w]; int total=0;
+        for(int y=0;y<h;y+=2) for(int x=0;x<w;x+=2) if(isRed(src,x,y)){col[x]++;total++;}
+        if(total<12)return null;
+
+        java.util.ArrayList<int[]> bars=new java.util.ArrayList<>();
+        int rs=-1;
+        for(int x=0;x<w;x+=2){
+            boolean on=col[x]>=2;
+            if(on&&rs<0)rs=x;
+            if((!on||x>=w-2)&&rs>=0){int e=on?x:x-2;if(e-rs>=2)bars.add(new int[]{rs,e});rs=-1;}
+        }
+        if(bars.size()==0)return null;
+
+        // Merge bars into digits. A 7-segment digit is about half as wide as it is tall.
+        java.util.ArrayList<int[]> digits=new java.util.ArrayList<>();
+        int gx=bars.get(0)[0], ge=bars.get(0)[1];
+        for(int i=1;i<bars.size();i++){
+            int[] b=bars.get(i);
+            int gap=b[0]-ge;
+            int[] yr=yRange(src,gx,ge), yr2=yRange(src,b[0],b[1]);
+            int hh=Math.max(24,Math.max(yr[1]-yr[0],yr2[1]-yr2[0]));
+            if(gap<=Math.max(12,(int)(hh*0.28))) ge=b[1];
+            else { digits.add(new int[]{gx,ge}); gx=b[0]; ge=b[1]; }
+        }
+        digits.add(new int[]{gx,ge});
+
+        StringBuilder out=new StringBuilder();
+        for(int[] d:digits){
+            int[] yr=yRange(src,d[0],d[1]); int dh=yr[1]-yr[0]+1,dw=d[1]-d[0]+1;
+            if(dh<16) continue; // status lamps/reflections
+            // Digit 1 has only the two right verticals and is naturally narrow.
+            if(dw < dh*0.28){ out.append('1'); continue; }
+            int val=decodeDigitFlexible(src,Math.max(0,d[0]-3),Math.max(0,yr[0]-3),Math.min(w-1,d[1]+3),Math.min(h-1,yr[1]+3));
+            if(val<0) continue;
+            out.append((char)('0'+val));
+        }
+        return out.length()>0?out.toString():null;
+    }
+    private int[] yRange(Bitmap b,int x0,int x1){
+        int lo=b.getHeight(),hi=-1;
+        for(int y=0;y<b.getHeight();y+=2)for(int x=Math.max(0,x0);x<=Math.min(b.getWidth()-1,x1);x+=2)
+            if(isRed(b,x,y)){lo=Math.min(lo,y);hi=Math.max(hi,y);}
+        return hi<0?new int[]{0,0}:new int[]{lo,hi};
+    }
+    private int decodeDigitFlexible(Bitmap b,int x0,int y0,int x1,int y1){
+        int w=Math.max(1,x1-x0),h=Math.max(1,y1-y0);
+        boolean[] q=new boolean[7];
+        q[0]=redRatio2(b,x0+.30*w,y0+.02*h,x0+.70*w,y0+.16*h)>.34;
+        q[1]=redRatio2(b,x0+.72*w,y0+.08*h,x0+.98*w,y0+.48*h)>.34;
+        q[2]=redRatio2(b,x0+.72*w,y0+.52*h,x0+.98*w,y0+.92*h)>.34;
+        q[3]=redRatio2(b,x0+.30*w,y0+.84*h,x0+.70*w,y0+.98*h)>.34;
+        q[4]=redRatio2(b,x0+.02*w,y0+.52*h,x0+.28*w,y0+.92*h)>.34;
+        q[5]=redRatio2(b,x0+.02*w,y0+.08*h,x0+.28*w,y0+.48*h)>.34;
+        q[6]=redRatio2(b,x0+.20*w,y0+.30*h,x0+.80*w,y0+.62*h)>.34;
+        int mask=0;for(int i=0;i<7;i++)if(q[i])mask|=1<<i;
+        int[] m={0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
+        int bd=8,bv=-1;for(int d=0;d<10;d++){int z=Integer.bitCount(mask^m[d]);if(z<bd){bd=z;bv=d;}}
+        return bd<=1?bv:-1;
+    }
+    private double redRatio2(Bitmap b,double ax,double ay,double bx,double by){
+        int x0=Math.max(0,(int)ax),y0=Math.max(0,(int)ay),x1=Math.min(b.getWidth(),(int)bx),y1=Math.min(b.getHeight(),(int)by),n=0,hit=0;
+        for(int y=y0;y<y1;y+=2)for(int x=x0;x<x1;x+=2){n++;if(isRed(b,x,y))hit++;}
+        return n==0?0:hit/(double)n;
+    }
+
+'''
+s=s[:start]+v2+s[end:]
+s=s.replace('50 Hz anti-flicker + SADECE GERÇEK LED + ANLIK 7-segment aktif.','50 Hz anti-flicker + FOTO-TESTLİ LED OKUMA + ANLIK 7-segment aktif.')
+p.write_text(s,encoding='utf-8')
+print('PHOTO_TESTED_DECODER_V2_OK')
