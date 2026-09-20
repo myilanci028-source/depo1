@@ -4,10 +4,19 @@ root=Path(sys.argv[1]); p=root/'app/src/main/java/com/mubel/kantar/CameraLiveAct
 s=p.read_text(encoding='utf-8')
 s=s.replace('private static final long OCR_PERIOD_MS = 120;','private static final long OCR_PERIOD_MS = 80;')
 needle='''Bitmap boosted = redLedBoost(composite);
+            if(!hasVerifiedDisplay(composite)){
+                main.post(() -> {
+                    stateText.setText("KANTAR EKRANI ARANIYOR");
+                    weightText.setText("-- kg");
+                    detailText.setText("Gerçek LED gösterge bulunmadan değer üretilmez.");
+                    latestStable = null; lastSeg = null; segHits = 0;
+                });
+                boosted.recycle(); composite.recycle(); crop.recycle(); frame.recycle(); processing=false; return;
+            }
             InputImage img = InputImage.fromBitmap(boosted,0);'''
 repl='''Bitmap boosted = redLedBoost(composite);
             final String segValue = hasRealLedDisplay(composite) ? decodeSevenSegmentInstant(composite) : null;
-            if (segValue != null) {
+            if (segValue != null && hasVerifiedDisplay(composite)) {
                 main.post(() -> {
                     try { pushInstantSegment(Double.parseDouble(segValue), segValue); } catch(Exception ignored) {}
                 });
@@ -24,6 +33,21 @@ methods=r'''    private boolean hasRealLedDisplay(Bitmap b){
         int bw=maxX-minX+1,bh=maxY-minY+1;
         return bw>w*0.06 && bh>h*0.025 && bw>bh*0.35;
     }
+    private boolean hasVerifiedDisplay(Bitmap b){
+        int w=b.getWidth(),h=b.getHeight(), score=0;
+        for(int cy=h/4;cy<3*h/4;cy+=Math.max(6,h/24)){
+            int ch=Math.max(28,h/5), y0=Math.max(0,cy-ch/2), y1=Math.min(h-1,cy+ch/2);
+            int cw=Math.max(90,w/2), x0=Math.max(0,w/2-cw/2), x1=Math.min(w-1,w/2+cw/2);
+            int dark=0,red=0,n=0;
+            for(int y=y0;y<=y1;y+=4)for(int x=x0;x<=x1;x+=4){
+                int cc=b.getPixel(x,y),r=Color.red(cc),g=Color.green(cc),bl=Color.blue(cc);
+                n++; if((r+g+bl)/3<105)dark++; if(isRed(b,x,y))red++;
+            }
+            if(n>0 && dark/(double)n>0.34 && red/(double)n>0.004 && red/(double)n<0.30) score++;
+        }
+        return score>=2;
+    }
+
     private String lastSeg=null; private int segHits=0;
     private void pushInstantSegment(double kg,String raw){
         String k=String.valueOf(Math.round(kg*10.0)/10.0);
@@ -115,7 +139,7 @@ p.write_text(s,encoding='utf-8')
 g=root/'app/build.gradle';x=g.read_text(encoding='utf-8')
 x=x.replace("applicationId 'com.mubel.kantar.v2112camera'","applicationId 'com.mubel.kantar.v2113instant'")
 x=x.replace('versionCode 2112','versionCode 2113')
-x=x.replace("versionName '2.10.12-CAMERA-BOOST-STABIL'","versionName '2.10.13-INSTANT-CAMERA-STABIL'")
+x=x.replace("versionName '2.10.12-CAMERA-BOOST-STABIL'","versionName '2.10.13-SCREEN-LOCK-STABIL'")
 g.write_text(x,encoding='utf-8')
 print('PATCH_2113_INSTANT_OK')
 
