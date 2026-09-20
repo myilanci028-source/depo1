@@ -325,3 +325,96 @@ p.write_text(s,encoding='utf-8')
 print('DISPLAY_FRAME_DECODER_V3_OK')
 
 # display-frame-v3-build
+
+# 2.10.13 STRICT ACTIVE LED + ZOOM.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+# Imports/fields for Camera2 sensor crop zoom.
+s=s.replace('import android.graphics.RectF;', 'import android.graphics.RectF;\nimport android.graphics.Rect;')
+s=s.replace('    private Bitmap history2;', '''    private Bitmap history2;
+    private Rect activeArray;
+    private float maxZoom=1f, zoom=1f;''')
+# Read zoom capability.
+s=s.replace('            Boolean fa = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE); flashAvailable = fa != null && fa;',
+'''            Boolean fa = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE); flashAvailable = fa != null && fa;
+            activeArray = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+            Float mz = c.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+            maxZoom = mz==null?1f:Math.max(1f,mz);''')
+# Add zoom row before action row.
+needle='''        LinearLayout row2 = new LinearLayout(this); row2.setOrientation(LinearLayout.HORIZONTAL); row2.setPadding(0, dp(9), 0, 0);'''
+repl='''        LinearLayout zoomRow = new LinearLayout(this); zoomRow.setOrientation(LinearLayout.HORIZONTAL); zoomRow.setGravity(Gravity.CENTER); zoomRow.setPadding(0, dp(8), 0, 0);
+        Button zoomMinus=button("ZOOM −"); Button zoomReset=button("1.0×"); Button zoomPlus=button("ZOOM +");
+        LinearLayout.LayoutParams zp=new LinearLayout.LayoutParams(0,dp(46),1f); zp.setMargins(dp(4),0,dp(4),0);
+        zoomRow.addView(zoomMinus,zp); zoomRow.addView(zoomReset,zp); zoomRow.addView(zoomPlus,zp); panel.addView(zoomRow);
+        zoomMinus.setOnClickListener(v->{ zoom=Math.max(1f,zoom-.25f); applyCapture(); zoomReset.setText(String.format(Locale.US,"%.2f×",zoom)); });
+        zoomPlus.setOnClickListener(v->{ zoom=Math.min(maxZoom,zoom+.25f); applyCapture(); zoomReset.setText(String.format(Locale.US,"%.2f×",zoom)); });
+        zoomReset.setOnClickListener(v->{ zoom=1f; applyCapture(); zoomReset.setText("1.0×"); });
+
+        LinearLayout row2 = new LinearLayout(this); row2.setOrientation(LinearLayout.HORIZONTAL); row2.setPadding(0, dp(9), 0, 0);'''
+if needle not in s: raise SystemExit('zoom UI marker missing')
+s=s.replace(needle,repl,1)
+# Apply Camera2 crop zoom.
+needle='''            previewBuilder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, exposure);
+            session.setRepeatingRequest(previewBuilder.build(), null, cameraHandler);'''
+repl='''            previewBuilder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, exposure);
+            if(activeArray!=null && zoom>1f){
+                int cw=Math.max(2,(int)(activeArray.width()/zoom)), ch=Math.max(2,(int)(activeArray.height()/zoom));
+                int cx=activeArray.centerX(), cy=activeArray.centerY();
+                previewBuilder.set(CaptureRequest.SCALER_CROP_REGION,new Rect(cx-cw/2,cy-ch/2,cx+cw/2,cy+ch/2));
+            } else if(activeArray!=null) previewBuilder.set(CaptureRequest.SCALER_CROP_REGION,activeArray);
+            session.setRepeatingRequest(previewBuilder.build(), null, cameraHandler);'''
+if needle not in s: raise SystemExit('zoom capture marker missing')
+s=s.replace(needle,repl,1)
+
+# Strict decoder: yellow frame gives geometry, but a digit is accepted ONLY when exact active segment mask matches.
+a=s.index('    private String decodeSevenSegmentInstant(Bitmap src){')
+b=s.index('    private int[] yRange(',a)
+if a<0 or b<0: raise SystemExit('strict decoder bounds missing')
+strict=r'''    private String decodeSevenSegmentInstant(Bitmap src){
+        int w=src.getWidth(),h=src.getHeight();
+        int minX=w,minY=h,maxX=-1,maxY=-1,n=0;
+        for(int y=0;y<h;y+=2)for(int x=0;x<w;x+=2){
+            int c=src.getPixel(x,y),r=Color.red(c),g=Color.green(c),bl=Color.blue(c);
+            boolean yellow=r>180 && g>125 && bl<165 && r-bl>45 && g-bl>18;
+            if(yellow){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);n++;}
+        }
+        if(n<30 || maxX-minX<w*.20 || maxY-minY<h*.07) return null;
+        int fw=maxX-minX,fh=maxY-minY;
+        int ix0=minX+(int)(fw*.035),ix1=maxX-(int)(fw*.035);
+        int iy0=minY+(int)(fh*.075),iy1=maxY-(int)(fh*.075);
+        int iw=ix1-ix0;
+        if(iw<50||iy1-iy0<30)return null;
+
+        StringBuilder out=new StringBuilder();
+        final int slots=5;
+        for(int i=0;i<slots;i++){
+            int x0=ix0+(int)(iw*(i/(double)slots)), x1=ix0+(int)(iw*((i+1)/(double)slots));
+            int d=decodeDigitStrict(src,x0,iy0,x1,iy1);
+            if(d>=0) out.append((char)('0'+d));
+        }
+        return out.length()==0?null:out.toString();
+    }
+    private int decodeDigitStrict(Bitmap b,int x0,int y0,int x1,int y1){
+        double w=x1-x0,h=y1-y0;
+        double[] z=new double[7];
+        z[0]=redRatio2(b,x0+.22*w,y0+.01*h,x0+.78*w,y0+.18*h);
+        z[1]=redRatio2(b,x0+.68*w,y0+.08*h,x0+.98*w,y0+.49*h);
+        z[2]=redRatio2(b,x0+.68*w,y0+.51*h,x0+.98*w,y0+.92*h);
+        z[3]=redRatio2(b,x0+.22*w,y0+.82*h,x0+.78*w,y0+.99*h);
+        z[4]=redRatio2(b,x0+.02*w,y0+.51*h,x0+.32*w,y0+.92*h);
+        z[5]=redRatio2(b,x0+.02*w,y0+.08*h,x0+.32*w,y0+.49*h);
+        z[6]=redRatio2(b,x0+.18*w,y0+.40*h,x0+.82*w,y0+.62*h);
+        double mx=0;for(double q:z)mx=Math.max(mx,q);
+        if(mx<.10)return -1; // no genuinely lit segment in this cell
+        // Adaptive threshold relative to the brightest emitted segment. Dim ghost outlines stay OFF.
+        double th=Math.max(.075,mx*.42);
+        int mask=0;for(int i=0;i<7;i++)if(z[i]>=th)mask|=1<<i;
+        int[] m={0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
+        for(int d=0;d<10;d++) if(mask==m[d]) return d; // ZERO tolerance: never invent a missing segment
+        return -1;
+    }
+'''
+s=s[:a]+strict+s[b:]
+s=s.replace('50 Hz anti-flicker + EKRAN ÇERÇEVESİ KİLİTLİ + 7-segment aktif.','50 Hz anti-flicker + AGRESİF OLMAYAN LED OKUMA + ZOOM aktif.')
+p.write_text(s,encoding='utf-8')
+print('STRICT_LED_ZOOM_OK')
