@@ -800,3 +800,27 @@ p.write_text(s,encoding='utf-8')
 print('V11_FULL_BAND_OK')
 
 # v11-full-band-build
+
+# V12 rotate-analysis fallback
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+a=s.index('    private String decodeSevenSegmentInstant(Bitmap src){')
+b=s.index('    private int decodeDigitDual(',a)
+old=s[a:b]
+body=old.replace('    private String decodeSevenSegmentInstant(Bitmap src){','    private String decodeSevenSegmentBand(Bitmap src){',1)
+wrapper='''    private String decodeSevenSegmentInstant(Bitmap src){
+        String v=decodeSevenSegmentBand(src); if(v!=null)return v;
+        android.graphics.Matrix m=new android.graphics.Matrix();
+        int[] turns={90,180,270};
+        for(int deg:turns){
+            m.reset(); m.postRotate(deg); Bitmap r=null;
+            try{r=Bitmap.createBitmap(src,0,0,src.getWidth(),src.getHeight(),m,true);v=decodeSevenSegmentBand(r);if(v!=null)return v;}
+            catch(Exception ignored){} finally{if(r!=null&&r!=src)r.recycle();}
+        }
+        return null;
+    }
+'''
+s=s[:a]+wrapper+body+s[b:]
+p.write_text(s,encoding='utf-8')
+print('V12_OK')
+# v12-build
