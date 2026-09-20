@@ -11,7 +11,7 @@ repl='''Bitmap boosted = redLedBoost(composite);
                 main.post(() -> {
                     try { pushInstantSegment(Double.parseDouble(segValue), segValue); } catch(Exception ignored) {}
                 });
-                boosted.recycle(); composite.recycle(); current.recycle(); busy=false; return;
+                boosted.recycle(); return;
             }
             InputImage img = InputImage.fromBitmap(boosted,0);'''
 if needle not in s: raise SystemExit('needle missing')
@@ -23,12 +23,12 @@ methods=r'''    private String lastSeg=null; private int segHits=0;
         if(raw.equals(lastSeg)) segHits++; else { lastSeg=raw; segHits=1; }
         // Direct decoder has priority. Two consecutive frames (~160 ms) are enough.
         if(segHits>=2) {
-            stable=kg;
-            status.setText("7-SEGMENT OK");
-            value.setText(k+" kg");
+            latestStable=kg;
+            stateText.setText("7-SEGMENT OK");
+            weightText.setText(k+" kg");
             detail.setText("Doğrudan LED okuma: "+raw);
         } else {
-            status.setText("RAKAM DOĞRULANIYOR");
+            stateText.setText("RAKAM DOĞRULANIYOR");
             value.setText(k+" kg");
         }
     }
