@@ -684,3 +684,68 @@ p.write_text(s,encoding='utf-8')
 print('V9_PANEL_GEOMETRY_OK')
 
 # v9-panel-geometry-build
+
+# 2.10.13 V10 - CAMERA MOTION ROBUST: detect the rightmost active digit directly.
+# Do not require yellow bezel or fixed 5-cell geometry for a one/few digit right-aligned weight.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+a=s.index('    private String decodeSevenSegmentInstant(Bitmap src){')
+b=s.index('    private int decodeDigitDual(',a)
+v10=r'''    private String decodeSevenSegmentInstant(Bitmap src){
+        int w=src.getWidth(),h=src.getHeight();
+        // Connected active-light bounds inside guide-friendly central field; isolated STEADY/TARE lamps are rejected by aspect/segment decode.
+        boolean[][] seen=new boolean[(h+3)/4][(w+3)/4];
+        java.util.ArrayList<int[]> comps=new java.util.ArrayList<>();
+        int H=seen.length,W=seen[0].length;
+        for(int gy=1;gy<H-1;gy++)for(int gx=1;gx<W-1;gx++){
+            if(seen[gy][gx]||!isRed(src,gx*4,gy*4))continue;
+            int minx=gx,maxx=gx,miny=gy,maxy=gy,n=0;
+            java.util.ArrayDeque<int[]> q=new java.util.ArrayDeque<>();q.add(new int[]{gx,gy});seen[gy][gx]=true;
+            while(!q.isEmpty()){
+                int[] z=q.removeFirst();int x=z[0],y=z[1];n++;minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y);
+                for(int yy=Math.max(0,y-2);yy<=Math.min(H-1,y+2);yy++)for(int xx=Math.max(0,x-2);xx<=Math.min(W-1,x+2);xx++){
+                    if(!seen[yy][xx]&&isRed(src,xx*4,yy*4)){seen[yy][xx]=true;q.add(new int[]{xx,yy});}
+                }
+            }
+            int bw=(maxx-minx+1)*4,bh=(maxy-miny+1)*4;
+            if(n>=5&&bh>=14&&bw>=5&&bh>bw*.65)comps.add(new int[]{minx*4,miny*4,(maxx+1)*4,(maxy+1)*4,n});
+        }
+        if(comps.isEmpty())return null;
+        // Rightmost plausible seven-segment component is units digit. Expand bbox because 2/3/7 can fragment at corners.
+        comps.sort((u,v)->Integer.compare(v[2],u[2]));
+        for(int[] c:comps){
+            int bh=c[3]-c[1],bw=c[2]-c[0];
+            int padX=Math.max(8,(int)(bh*.28)),padY=Math.max(5,(int)(bh*.10));
+            int x0=Math.max(0,c[0]-padX),x1=Math.min(w,c[2]+padX),y0=Math.max(0,c[1]-padY),y1=Math.min(h,c[3]+padY);
+            int d=decodeDigitDual(src,x0,y0,x1,y1);
+            if(d>=0){
+                // Build preceding digits using measured digit height; blanks on left are normal.
+                double pitch=Math.max(18,(y1-y0)*.62);
+                java.util.ArrayList<Integer> vals=new java.util.ArrayList<>();vals.add(d);
+                for(int k=1;k<5;k++){
+                    int cx1=(int)(x1-k*pitch),cx0=(int)(x0-k*pitch);
+                    if(cx1<=0)break;
+                    int pd=decodeDigitDual(src,Math.max(0,cx0),y0,Math.min(w,cx1),y1);
+                    if(pd<0)break; vals.add(0,pd);
+                }
+                StringBuilder out=new StringBuilder();for(int z:vals)out.append((char)('0'+z));
+                return out.toString();
+            }
+        }
+        return null;
+    }
+'''
+s=s[:a]+v10+s[b:]
+# Slightly widen active LED chroma acceptance for sun/shade while retaining strong emission contrast.
+old='''        boolean warm = r>190 && g>115 && (g-bl)>12 && (r-bl)>55;
+        // In shade an active LED is deep, very bright red. Dim inactive "8" outlines are rejected.
+        boolean deep = r>205 && g<112 && bl<112 && r-Math.max(g,bl)>100;'''
+new='''        boolean warm = r>175 && g>90 && (g-bl)>8 && (r-bl)>45;
+        // In shade an active LED is deep bright red; require strong red dominance so ghost 8 outlines stay off.
+        boolean deep = r>180 && r-Math.max(g,bl)>75;'''
+if old in s:s=s.replace(old,new,1)
+s=s.replace('50 Hz + 5 HANE + PANEL KİLİDİ + DOĞRUDAN 7-SEGMENT aktif.','50 Hz + HAREKETLİ EKRAN + DOĞRUDAN 7-SEGMENT aktif.')
+p.write_text(s,encoding='utf-8')
+print('V10_MOTION_ROBUST_OK')
+
+# v10-motion-robust-build
