@@ -525,3 +525,51 @@ p.write_text(s,encoding='utf-8')
 print('DUAL_LIGHT_V5_OK')
 
 # dual-light-v5-build
+
+# 2.10.13 STABLE-LOCK v6: once a real value repeats, lock it; reject transient ghost expansions.
+p=root/'app/src/main/java/com/mubel/kantar/CameraLiveActivity.java'
+s=p.read_text(encoding='utf-8')
+# Replace sample voting with hysteresis lock: acquire fast, release/change only on sustained new value.
+a=s.index('    private void pushSample(')
+b=s.index('    private void analyzeFrame()',a)
+if a<0 or b<0: raise SystemExit('pushSample bounds missing')
+lock=r'''    private Double lockedKg=null, pendingKg=null;
+    private int pendingHits=0, lostHits=0;
+    private long lastLockMs=0;
+
+    private void pushSample(double value,String raw){
+        if(value<0 || value>99999) return;
+        double v=Math.rint(value); // crane display is integer kg
+        long now=System.currentTimeMillis();
+
+        if(lockedKg==null){
+            if(pendingKg!=null && Math.abs(pendingKg-v)<0.1) pendingHits++; else {pendingKg=v;pendingHits=1;}
+            // Acquire quickly: same real display value in 2 observations.
+            if(pendingHits>=2){
+                lockedKg=v; lastLockMs=now; lostHits=0; pendingKg=null; pendingHits=0;
+                runOnUiThread(()->{ valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg)); statusText.setText("SABİT · KİLİTLENDİ"); detailText.setText("Ekran değeri sabitlendi"); });
+            }
+            return;
+        }
+
+        if(Math.abs(lockedKg-v)<0.1){
+            lastLockMs=now; lostHits=0; pendingKg=null; pendingHits=0;
+            runOnUiThread(()->{ valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg)); statusText.setText("SABİT · KİLİTLİ"); });
+            return;
+        }
+
+        // Different reading: do NOT jump. Require the same new value 5 times.
+        if(pendingKg!=null && Math.abs(pendingKg-v)<0.1) pendingHits++; else {pendingKg=v;pendingHits=1;}
+        if(pendingHits>=5){
+            lockedKg=v; lastLockMs=now; lostHits=0; pendingKg=null; pendingHits=0;
+            runOnUiThread(()->{ valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg)); statusText.setText("YENİ DEĞER · KİLİTLENDİ"); detailText.setText("Yeni ekran değeri doğrulandı"); });
+        } else {
+            runOnUiThread(()->{ valueText.setText(String.format(Locale.US,"%.0f kg",lockedKg)); statusText.setText("SABİT · DOĞRULANIYOR"); detailText.setText("Geçici okumalar kilidi bozamaz"); });
+        }
+    }
+
+'''
+s=s[:a]+lock+s[b:]
+s=s.replace('50 Hz anti-flicker + GÜNEŞ/GÖLGE LED + 5 HANE + ZOOM aktif.','50 Hz anti-flicker + GÜNEŞ/GÖLGE + 5 HANE + AKILLI SABİTLEME aktif.')
+p.write_text(s,encoding='utf-8')
+print('STABLE_LOCK_V6_OK')
