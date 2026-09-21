@@ -24,6 +24,7 @@ jobs:
           python3 mubel-kantar-2111/patch_2111.py build-2113 mubel-kantar-2111
           python3 mubel-kantar-2112/patch_2112.py build-2113
           python3 mubel-kantar-2113-instant/patch_2113.py build-2113
+          python3 mubel-kantar-2113-instant/patch_2113_v13.py build-2113
           mkdir -p dist-2113
           cat >> build-2113/app/build.gradle <<'EOF'
           android { packaging { resources { excludes += ['META-INF/LICENSE.md','META-INF/LICENSE.txt','META-INF/NOTICE.md','META-INF/NOTICE.txt'] } } }
