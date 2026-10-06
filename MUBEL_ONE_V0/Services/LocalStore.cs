@@ -20,6 +20,7 @@ public sealed class LocalStore
         var cmd = cn.CreateCommand();
         cmd.CommandText = """
         PRAGMA journal_mode=WAL;
+
         CREATE TABLE IF NOT EXISTS observed_events(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             captured_at TEXT NOT NULL,
@@ -47,8 +48,101 @@ public sealed class LocalStore
             confidence REAL NOT NULL DEFAULT 0,
             evidence TEXT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS source_evidence(
+            source_path TEXT PRIMARY KEY,
+            extension TEXT NOT NULL,
+            modified_utc TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            sha256 TEXT NOT NULL,
+            table_names TEXT NULL,
+            dml_verbs TEXT NULL,
+            indexed_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ix_source_evidence_sha
+            ON source_evidence(sha256);
+
+        CREATE TABLE IF NOT EXISTS schema_catalog(
+            object_name TEXT PRIMARY KEY,
+            object_group TEXT NOT NULL,
+            evidence_level TEXT NOT NULL,
+            source_name TEXT NOT NULL,
+            first_seen TEXT NOT NULL,
+            last_seen TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS document_code_map(
+            code INTEGER NOT NULL,
+            map_type TEXT NOT NULL,
+            mapped_value TEXT NOT NULL,
+            evidence_level TEXT NOT NULL,
+            source_name TEXT NOT NULL,
+            PRIMARY KEY(code,map_type)
+        );
+
+        CREATE TABLE IF NOT EXISTS integration_health(
+            integration_key TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            state TEXT NOT NULL,
+            detail TEXT NULL,
+            checked_at TEXT NOT NULL
+        );
         """;
         await cmd.ExecuteNonQueryAsync();
+
+        await SeedAsync(cn);
+    }
+
+    private static async Task SeedAsync(SqliteConnection cn)
+    {
+        await using var tx = await cn.BeginTransactionAsync();
+
+        foreach (var table in VegaSeedCatalog.SanalMagazaTables)
+        {
+            var cmd = cn.CreateCommand();
+            cmd.Transaction = (SqliteTransaction)tx;
+            cmd.CommandText = """
+            INSERT INTO schema_catalog(object_name,object_group,evidence_level,source_name,first_seen,last_seen)
+            VALUES($n,'VegaSanalMagaza','D','YILANCIOGLU tablo.sql 2026-07-15',$t,$t)
+            ON CONFLICT(object_name) DO UPDATE SET last_seen=excluded.last_seen;
+            """;
+            cmd.Parameters.AddWithValue("$n", table);
+            cmd.Parameters.AddWithValue("$t", DateTimeOffset.UtcNow.ToString("O"));
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        foreach (var kv in VegaSeedCatalog.BelgeHeaderByIzahat)
+        {
+            var cmd = cn.CreateCommand();
+            cmd.Transaction = (SqliteTransaction)tx;
+            cmd.CommandText = """
+            INSERT INTO document_code_map(code,map_type,mapped_value,evidence_level,source_name)
+            VALUES($c,'BELGEIZAHAT_HEADER',$v,'D','YILANCIOGLU script.sql 2026-07-14')
+            ON CONFLICT(code,map_type) DO UPDATE SET
+                mapped_value=excluded.mapped_value,
+                evidence_level=excluded.evidence_level,
+                source_name=excluded.source_name;
+            """;
+            cmd.Parameters.AddWithValue("$c", kv.Key);
+            cmd.Parameters.AddWithValue("$v", kv.Value);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        foreach (var kv in VegaSeedCatalog.PortfolioStatus)
+        {
+            var cmd = cn.CreateCommand();
+            cmd.Transaction = (SqliteTransaction)tx;
+            cmd.CommandText = """
+            INSERT INTO document_code_map(code,map_type,mapped_value,evidence_level,source_name)
+            VALUES($c,'PORTFOY_STATUS',$v,'D','YILANCIOGLU script.sql 2026-07-14')
+            ON CONFLICT(code,map_type) DO UPDATE SET mapped_value=excluded.mapped_value;
+            """;
+            cmd.Parameters.AddWithValue("$c", kv.Key);
+            cmd.Parameters.AddWithValue("$v", kv.Value);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await tx.CommitAsync();
     }
 
     public async Task SaveEventAsync(ObservedEvent e)
@@ -91,6 +185,36 @@ public sealed class LocalStore
         cmd.Parameters.AddWithValue("$ev", (object?)e.Evidence ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync();
     }
+
+    public async Task SaveSourceEvidenceAsync(SourceEvidence e)
+    {
+        await using var cn = new SqliteConnection($"Data Source={DbPath}");
+        await cn.OpenAsync();
+
+        var cmd = cn.CreateCommand();
+        cmd.CommandText = """
+        INSERT INTO source_evidence
+        (source_path,extension,modified_utc,size_bytes,sha256,table_names,dml_verbs,indexed_at)
+        VALUES($p,$x,$m,$s,$h,$t,$v,$i)
+        ON CONFLICT(source_path) DO UPDATE SET
+            extension=excluded.extension,
+            modified_utc=excluded.modified_utc,
+            size_bytes=excluded.size_bytes,
+            sha256=excluded.sha256,
+            table_names=excluded.table_names,
+            dml_verbs=excluded.dml_verbs,
+            indexed_at=excluded.indexed_at;
+        """;
+        cmd.Parameters.AddWithValue("$p", e.SourcePath);
+        cmd.Parameters.AddWithValue("$x", e.Extension);
+        cmd.Parameters.AddWithValue("$m", e.ModifiedUtc.ToString("O"));
+        cmd.Parameters.AddWithValue("$s", e.SizeBytes);
+        cmd.Parameters.AddWithValue("$h", e.Sha256);
+        cmd.Parameters.AddWithValue("$t", (object?)e.TableNames ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$v", (object?)e.DmlVerbs ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$i", DateTimeOffset.UtcNow.ToString("O"));
+        await cmd.ExecuteNonQueryAsync();
+    }
 }
 
 public sealed record ObservedEvent(
@@ -107,3 +231,12 @@ public sealed record ObservedEvent(
     string? InferredOperation,
     double Confidence,
     string? Evidence);
+
+public sealed record SourceEvidence(
+    string SourcePath,
+    string Extension,
+    DateTime ModifiedUtc,
+    long SizeBytes,
+    string Sha256,
+    string? TableNames,
+    string? DmlVerbs);
