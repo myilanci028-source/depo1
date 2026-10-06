@@ -122,16 +122,25 @@ public sealed class SourceHarvester
                 dir.Contains("\\Windows\\", StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            string[] subdirs;
+            string[] files;
             try
             {
-                foreach (var sub in Directory.EnumerateDirectories(dir))
-                    stack.Push(sub);
-
-                foreach (var file in Directory.EnumerateFiles(dir))
-                    if (Extensions.Contains(Path.GetExtension(file)))
-                        yield return file;
+                subdirs = Directory.GetDirectories(dir);
+                files = Directory.GetFiles(dir);
             }
-            catch { }
+            catch
+            {
+                subdirs = Array.Empty<string>();
+                files = Array.Empty<string>();
+            }
+
+            foreach (var sub in subdirs)
+                stack.Push(sub);
+
+            foreach (var file in files)
+                if (Extensions.Contains(Path.GetExtension(file)))
+                    yield return file;
 
             await Task.Yield();
         }
