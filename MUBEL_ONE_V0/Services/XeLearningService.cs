@@ -127,13 +127,16 @@ public sealed class XeLearningService
             if (!_seen.Add(unique)) continue;
             if (_seen.Count > 20000) _seen.Clear();
 
-            var a = OperationClassifier.Analyze(sql);
+            // Ham müşteri/veri literal değerleri öğrenme DB'sine yazılmaz.
+            // Yapısal SQL ve tablo isimleri korunur; parola/token benzeri atamalar maskelenir.
+            var safeSql = SecretRedactor.Sql(sql);
+            var a = OperationClassifier.Analyze(safeSql);
             int? sid = int.TryParse(Action("session_id"), out var si) ? si : null;
 
             await _store.SaveEventAsync(new ObservedEvent(
                 stamp, eventName, "YILANCIOGLU", sid, Action("transaction_id"),
                 app, Action("client_hostname"), Action("server_principal_name"),
-                sql, a.Fingerprint, a.Operation, a.Confidence, a.Evidence));
+                safeSql, a.Fingerprint, a.Operation, a.Confidence, a.Evidence));
 
             _log($"ÖĞRENİLDİ: {a.Operation ?? "Yeni işlem deseni"} [{a.Fingerprint}]  {a.Evidence}");
         }
