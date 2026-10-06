@@ -11,6 +11,12 @@ public sealed class BootstrapService
         var store = new LocalStore();
         await store.InitializeAsync();
         _log("Yerel öğrenme deposu hazır.");
+        _log($"Seed harita: {VegaSeedCatalog.SanalMagazaTables.Length} SBH/Sanal Mağaza tablosu.");
+        _log($"Seed harita: {VegaSeedCatalog.BelgeHeaderByIzahat.Count} BELGEIZAHAT → başlık eşleşmesi.");
+
+        // Eski çalışmalar kullanıcının hiçbir dosyasını değiştirmeden yalnız indekslenir.
+        var harvester = new SourceHarvester(store, _log);
+        await harvester.RunAsync(ct);
 
         var discovery = new DiscoveryService(_log);
         var candidates = discovery.FindConnectionCandidates();
@@ -20,7 +26,7 @@ public sealed class BootstrapService
         if (result is null)
         {
             _log("YSERVER otomatik bağlantısı henüz kurulamadı.");
-            _log("Hiçbir server verisi değiştirilmedi. Yerel keşif devam edecek.");
+            _log("Hiçbir server verisi değiştirilmedi. Yerel kaynak haritası kullanılabilir durumda.");
             return;
         }
 
@@ -38,6 +44,12 @@ public sealed class BootstrapService
 
         if (periods.Length > 0)
             _log("Bulunan firma/dönem önekleri: " + string.Join(", ", periods));
+
+        var sbhFound = snapshot.YilanciogluTables
+            .Where(x => x.StartsWith("SBH103", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (sbhFound.Length > 0)
+            _log($"Vega Sanal Mağaza / SBH yüzeyi: {sbhFound.Length} tablo canlı şemada bulundu.");
 
         if (snapshot.YilanciogluDatabaseId is null)
         {
