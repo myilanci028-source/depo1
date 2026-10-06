@@ -1,0 +1,50 @@
+name: MUBEL ONE V0 - Windows EXE
+
+on:
+  push:
+    branches:
+      - mubel-one-v0
+    paths:
+      - 'MUBEL_ONE_V0/**'
+      - '.github/workflows/mubel-one-v0-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore MUBEL_ONE_V0/MubelOne.csproj
+
+      - name: Publish single EXE
+        run: >
+          dotnet publish MUBEL_ONE_V0/MubelOne.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o MUBEL_ONE_V0/publish
+
+      - name: SHA256
+        shell: pwsh
+        run: |
+          Get-FileHash MUBEL_ONE_V0/publish/MUBEL_ONE.exe -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  MUBEL_ONE.exe" } |
+            Set-Content MUBEL_ONE_V0/publish/MUBEL_ONE.exe.sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_ONE_V0_WINDOWS_X64
+          path: |
+            MUBEL_ONE_V0/publish/MUBEL_ONE.exe
+            MUBEL_ONE_V0/publish/MUBEL_ONE.exe.sha256.txt
+          if-no-files-found: error
