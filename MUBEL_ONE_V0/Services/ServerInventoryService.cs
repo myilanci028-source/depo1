@@ -76,12 +76,16 @@ public sealed class ServerInventoryService
             o.type_desc,
             ISNULL(CONVERT(nvarchar(max),sm.definition),N'') AS definition,
             ISNULL(pk.name,N'') AS primary_key_name,
-            (
-              SELECT STRING_AGG(CONCAT(c.name,':',ty.name,':',c.max_length,':',c.is_nullable),';')
+            STUFF((
+              SELECT ';' + c.name + ':' + ty.name + ':' +
+                     CONVERT(varchar(20),c.max_length) + ':' +
+                     CONVERT(varchar(5),c.is_nullable)
               FROM sys.columns c
               JOIN sys.types ty ON ty.user_type_id=c.user_type_id
               WHERE c.object_id=o.object_id
-            ) AS columns_signature
+              ORDER BY c.column_id
+              FOR XML PATH(''), TYPE
+            ).value('.','nvarchar(max)'),1,1,'') AS columns_signature
         FROM sys.objects o
         JOIN sys.schemas s ON s.schema_id=o.schema_id
         LEFT JOIN sys.sql_modules sm ON sm.object_id=o.object_id
