@@ -14,10 +14,11 @@ public sealed class BootstrapService
         _log($"Seed harita: {VegaSeedCatalog.SanalMagazaTables.Length} SBH/Sanal Mağaza tablosu.");
         _log($"Seed harita: {VegaSeedCatalog.BelgeHeaderByIzahat.Count} BELGEIZAHAT → başlık eşleşmesi.");
 
-        // Eski çalışmalar kullanıcının hiçbir dosyasını değiştirmeden yalnız indekslenir.
+        // 1) Eski LINQ/SQL/BAT/Arctos/Belge.sql çalışmalarını değiştirmeden indeksle.
         var harvester = new SourceHarvester(store, _log);
         await harvester.RunAsync(ct);
 
+        // 2) Mevcut Arctos/config bağlantılarından YSERVER/192.168.1.250 dahil erişilebilir SQL'i bul.
         var discovery = new DiscoveryService(_log);
         var candidates = discovery.FindConnectionCandidates();
         _log($"Otomatik bağlantı adayı: {candidates.Count}");
@@ -25,14 +26,14 @@ public sealed class BootstrapService
         var result = await discovery.TryDiscoverAsync(candidates, ct);
         if (result is null)
         {
-            _log("YSERVER otomatik bağlantısı henüz kurulamadı.");
+            _log("SQL Server otomatik bağlantısı henüz kurulamadı.");
             _log("Hiçbir server verisi değiştirilmedi. Yerel kaynak haritası kullanılabilir durumda.");
             return;
         }
 
         var (snapshot, connectionString) = result.Value;
         _log($"SQL: {snapshot.ServerName}  {snapshot.ProductVersion}  {snapshot.Edition}");
-        _log($"Database sayısı: {snapshot.Databases.Count}");
+        _log($"Görülebilen database sayısı: {snapshot.Databases.Count}");
         _log($"YILANCIOGLU tablo sayısı (görülebilen): {snapshot.YilanciogluTables.Count}");
 
         var periods = snapshot.YilanciogluTables
@@ -51,18 +52,59 @@ public sealed class BootstrapService
         if (sbhFound.Length > 0)
             _log($"Vega Sanal Mağaza / SBH yüzeyi: {sbhFound.Length} tablo canlı şemada bulundu.");
 
-        if (snapshot.YilanciogluDatabaseId is null)
+        // 3) Tüm erişilebilir kullanıcı databaselerini ve programlanabilir nesneleri salt-okunur haritala.
+        var inventory = new ServerInventoryService(connectionString, store, _log);
+        var dbs = await inventory.RunAsync(ct);
+        var dbMap = dbs.ToDictionary(x => x.Id, x => x.Name);
+
+        if (dbMap.Count == 0)
         {
-            _log("YILANCIOGLU DB_ID alınamadı; öğrenme oturumu açılmadı.");
+            _log("Kullanıcı database envanteri boş; canlı öğrenme açılmadı.");
             return;
         }
 
-        var learner = new XeLearningService(
-            connectionString,
-            snapshot.YilanciogluDatabaseId.Value,
-            store,
-            _log);
+        // 4) Canlı SQL olayları + kaynak/hedef tablo soy ağacı.
+        var learner = new XeLearningService(connectionString, dbMap, store, _log);
 
-        await learner.RunAsync(ct);
+        // 5) DMV tablo hareket sayaçları ile INSERT/UPDATE/DELETE etkisini bağımsız doğrula.
+        // YILANCIOGLU sık, diğer databaseler daha seyrek kontrol edilir; server yükü sınırlı tutulur.
+        var counterTask = RunMutationCountersAsync(connectionString, dbs, store, ct);
+        var learnerTask = learner.RunAsync(ct);
+
+        await Task.WhenAll(learnerTask, counterTask);
+    }
+
+    private async Task RunMutationCountersAsync(
+        string connectionString,
+        IReadOnlyList<(int Id,string Name)> dbs,
+        LocalStore store,
+        CancellationToken ct)
+    {
+        var counter = new MutationCounterService(connectionString, store, _log);
+        long tick = 0;
+
+        while (!ct.IsCancellationRequested)
+        {
+            tick++;
+
+            foreach (var db in dbs)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var isPriority = db.Name.Equals("YILANCIOGLU", StringComparison.OrdinalIgnoreCase);
+                if (!isPriority && tick % 6 != 0) continue;
+
+                try
+                {
+                    await counter.SnapshotAsync(db.Name, db.Id, ct);
+                }
+                catch (Exception ex)
+                {
+                    _log($"DMV: {db.Name} kontrol edilemedi ({ex.GetType().Name}).");
+                }
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(5), ct);
+        }
     }
 }
