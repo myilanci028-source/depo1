@@ -7,25 +7,35 @@ public sealed class XeLearningService
 {
     private const string SessionName = "MUBEL_ONE_LEARN";
     private readonly string _connectionString;
-    private readonly int _databaseId;
+    private readonly IReadOnlyDictionary<int,string> _databases;
     private readonly LocalStore _store;
     private readonly Action<string> _log;
 
-    public XeLearningService(string connectionString, int databaseId, LocalStore store, Action<string> log)
+    public XeLearningService(
+        string connectionString,
+        IReadOnlyDictionary<int,string> databases,
+        LocalStore store,
+        Action<string> log)
     {
         _connectionString = connectionString;
-        _databaseId = databaseId;
+        _databases = databases;
         _store = store;
         _log = log;
     }
 
     public async Task RunAsync(CancellationToken ct)
     {
+        if (_databases.Count == 0)
+        {
+            _log("ÖĞRENME: izlenecek kullanıcı database'i bulunamadı.");
+            return;
+        }
+
         try
         {
             await CreateEphemeralSessionAsync(ct);
-            _log("ÖĞRENME: geçici Extended Events oturumu başladı (STARTUP_STATE=OFF, ring_buffer).");
-            _log("ÖĞRENME: YILANCIOGLU verisine tablo/trigger/kolon eklenmedi.");
+            _log($"ÖĞRENME: geçici Extended Events oturumu başladı; {_databases.Count} kullanıcı database'i izleniyor.");
+            _log("ÖĞRENME: YILANCIOGLU veya diğer databaselere tablo/trigger/kolon eklenmedi.");
 
             while (!ct.IsCancellationRequested)
             {
@@ -49,6 +59,9 @@ public sealed class XeLearningService
         await using var cn = new SqlConnection(WithMaster(_connectionString));
         await cn.OpenAsync(ct);
 
+        var predicate = string.Join(" OR ",
+            _databases.Keys.OrderBy(x => x).Select(id => $"[sqlserver].[database_id]=({id})"));
+
         var cmd = cn.CreateCommand();
         cmd.CommandText = $"""
         IF EXISTS (SELECT 1 FROM sys.server_event_sessions WHERE name=N'{SessionName}')
@@ -59,19 +72,19 @@ public sealed class XeLearningService
             ACTION(sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.database_id,
                    sqlserver.server_principal_name,sqlserver.session_id,sqlserver.sql_text,
                    sqlserver.transaction_id)
-            WHERE ([sqlserver].[database_id]=({_databaseId}))),
+            WHERE ({predicate})),
         ADD EVENT sqlserver.sql_statement_completed(
             ACTION(sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.database_id,
                    sqlserver.server_principal_name,sqlserver.session_id,sqlserver.sql_text,
                    sqlserver.transaction_id)
-            WHERE ([sqlserver].[database_id]=({_databaseId}))),
+            WHERE ({predicate})),
         ADD EVENT sqlserver.sp_statement_completed(
             ACTION(sqlserver.client_app_name,sqlserver.client_hostname,sqlserver.database_id,
                    sqlserver.server_principal_name,sqlserver.session_id,sqlserver.sql_text,
                    sqlserver.transaction_id)
-            WHERE ([sqlserver].[database_id]=({_databaseId})))
-        ADD TARGET package0.ring_buffer(SET max_events_limit=(5000),max_memory=(8192))
-        WITH (MAX_MEMORY=4096 KB, EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,
+            WHERE ({predicate}))
+        ADD TARGET package0.ring_buffer(SET max_events_limit=(10000),max_memory=(16384))
+        WITH (MAX_MEMORY=8192 KB, EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,
               MAX_DISPATCH_LATENCY=1 SECONDS, TRACK_CAUSALITY=ON, STARTUP_STATE=OFF);
 
         ALTER EVENT SESSION [{SessionName}] ON SERVER STATE=START;
@@ -121,24 +134,34 @@ public sealed class XeLearningService
             var upper = sql.TrimStart().ToUpperInvariant();
             if (!(upper.StartsWith("INSERT ") || upper.StartsWith("UPDATE ") || upper.StartsWith("DELETE ") ||
                   upper.StartsWith("MERGE ") || upper.StartsWith("EXEC ") || upper.StartsWith("EXECUTE ") ||
-                  upper.Contains("SP_EXECUTESQL"))) continue;
+                  upper.Contains("SP_EXECUTESQL") || upper.Contains("SP_EXECUTE"))) continue;
 
-            var unique = $"{eventName}|{stamp:O}|{Action("session_id")}|{sql}";
+            var dbId = int.TryParse(Action("database_id"), out var di) ? di : 0;
+            var databaseName = _databases.TryGetValue(dbId, out var dn) ? dn : $"DBID_{dbId}";
+
+            var unique = $"{eventName}|{stamp:O}|{Action("session_id")}|{databaseName}|{sql}";
             if (!_seen.Add(unique)) continue;
-            if (_seen.Count > 20000) _seen.Clear();
+            if (_seen.Count > 50000) _seen.Clear();
 
-            // Ham müşteri/veri literal değerleri öğrenme DB'sine yazılmaz.
-            // Yapısal SQL ve tablo isimleri korunur; parola/token benzeri atamalar maskelenir.
+            // Ham cari, müşteri, token, parola ve literal değerler yerel öğrenme DB'sine alınmaz.
             var safeSql = SecretRedactor.Sql(sql);
             var a = OperationClassifier.Analyze(safeSql);
             int? sid = int.TryParse(Action("session_id"), out var si) ? si : null;
+            var transactionId = Action("transaction_id");
 
             await _store.SaveEventAsync(new ObservedEvent(
-                stamp, eventName, "YILANCIOGLU", sid, Action("transaction_id"),
+                stamp, eventName, databaseName, sid, transactionId,
                 app, Action("client_hostname"), Action("server_principal_name"),
                 safeSql, a.Fingerprint, a.Operation, a.Confidence, a.Evidence));
 
-            _log($"ÖĞRENİLDİ: {a.Operation ?? "Yeni işlem deseni"} [{a.Fingerprint}]  {a.Evidence}");
+            var edges = SqlLineageAnalyzer.Analyze(
+                databaseName, safeSql, transactionId, a.Fingerprint, stamp,
+                "A", "YSERVER Extended Events");
+            if (edges.Count > 0)
+                await _store.SaveLineageAsync(edges);
+
+            var priority = databaseName.Equals("YILANCIOGLU", StringComparison.OrdinalIgnoreCase) ? "★ " : "";
+            _log($"{priority}ÖĞRENİLDİ: {databaseName} / {a.Operation ?? "Yeni işlem deseni"} [{a.Fingerprint}] {a.Evidence}");
         }
     }
 
@@ -158,7 +181,12 @@ public sealed class XeLearningService
 
     private static string WithMaster(string cs)
     {
-        var b = new SqlConnectionStringBuilder(cs) { InitialCatalog = "master", ApplicationName = "MUBEL ONE V0" };
+        var b = new SqlConnectionStringBuilder(cs)
+        {
+            InitialCatalog = "master",
+            ApplicationName = "MUBEL ONE V0",
+            TrustServerCertificate = true
+        };
         return b.ConnectionString;
     }
 }
