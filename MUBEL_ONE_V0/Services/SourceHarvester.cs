@@ -96,6 +96,29 @@ public sealed class SourceHarvester
                         hash,
                         string.Join(",", tables),
                         string.Join(",", verbs)));
+
+                    // Belge.sql, LINQPad ve eski aktarım kodlarından kaynak -> hedef soy ağacı çıkar.
+                    // Ham literal değerler hiçbir zaman saklanmaz.
+                    var dbName = InferDatabaseName(text);
+                    foreach (var statement in SplitStatements(text).Take(5000))
+                    {
+                        if (!DmlRegex.IsMatch(statement)) continue;
+
+                        var safeStatement = SecretRedactor.Sql(statement);
+                        var analyzed = OperationClassifier.Analyze(safeStatement);
+                        var edges = SqlLineageAnalyzer.Analyze(
+                            dbName,
+                            safeStatement,
+                            null,
+                            analyzed.Fingerprint,
+                            new DateTimeOffset(fi.LastWriteTimeUtc, TimeSpan.Zero),
+                            "D",
+                            $"Yerel kaynak: {Path.GetFileName(file)}");
+
+                        if (edges.Count > 0)
+                            await _store.SaveLineageAsync(edges);
+                    }
+
                     evidence++;
                 }
                 catch { /* tarayıcı hiçbir kaynak dosyasını değiştirmez; hatalı dosyayı atlar */ }
@@ -103,6 +126,26 @@ public sealed class SourceHarvester
         }
 
         _log($"KAYNAK HASADI: {files} dosya görüldü, {evidence} Vega kanıt kaynağı indekslendi.");
+    }
+
+    private static string InferDatabaseName(string text)
+    {
+        var m = Regex.Match(text, @"(?im)^\s*USE\s+\[?(?<db>[A-Z0-9_\-]+)\]?\s*$");
+        return m.Success ? m.Groups["db"].Value : "YILANCIOGLU";
+    }
+
+    private static IEnumerable<string> SplitStatements(string text)
+    {
+        foreach (var chunk in Regex.Split(text, @"(?im)^\s*GO\s*$"))
+        {
+            foreach (var statement in chunk.Split(';'))
+            {
+                var s = statement.Trim();
+                if (s.Length == 0) continue;
+                if (s.Length > 100_000) s = s[..100_000];
+                yield return s;
+            }
+        }
     }
 
     private static async IAsyncEnumerable<string> EnumerateSafeAsync(
