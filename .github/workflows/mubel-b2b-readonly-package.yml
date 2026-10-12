@@ -1,0 +1,35 @@
+name: MUBEL B2B READ ONLY KOPRU
+
+on:
+  push:
+    branches:
+      - mubel-one-v0
+    paths:
+      - 'MUBEL_B2B_READONLY_KOPRU/**'
+      - '.github/workflows/mubel-b2b-readonly-package.yml'
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Compress-Archive -Path MUBEL_B2B_READONLY_KOPRU\* -DestinationPath out\MUBEL_B2B_READONLY_KOPRU_V1.zip -Force
+          Get-FileHash out\MUBEL_B2B_READONLY_KOPRU_V1.zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  MUBEL_B2B_READONLY_KOPRU_V1.zip" } |
+            Set-Content out\MUBEL_B2B_READONLY_KOPRU_V1.zip.sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUBEL_B2B_READONLY_KOPRU_V1
+          path: |
+            out/MUBEL_B2B_READONLY_KOPRU_V1.zip
+            out/MUBEL_B2B_READONLY_KOPRU_V1.zip.sha256.txt
+          if-no-files-found: error
