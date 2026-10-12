@@ -279,6 +279,20 @@ $ping=Invoke-RestMethod "$AgentUrl/command" -Method Post -Headers $hdr -ContentT
 if(!$ping.ok -or $ping.result.writeEnabled -ne $false){Stop-Safe "ERP Agent READ ONLY ping testi gecmedi." 44}
 OK "ERP Agent ayakta; writeEnabled=false."
 
+# Kullanici dugmeye basmadan siparis tablolarini da otomatik oku ve raporla.
+try{
+  $describeBody=@{command="describeOrderTables";requestId="mubel-auto-describe";payload=@{}}|ConvertTo-Json -Depth 4
+  $describe=Invoke-RestMethod "$AgentUrl/command" -Method Post -Headers $hdr -ContentType "application/json" -Body $describeBody -TimeoutSec 60
+  if($describe.ok){
+    $describe.result|ConvertTo-Json -Depth 20|Set-Content (Join-Path $LogDir "SIPARIS_TABLOLARI_INCELEME.json") -Encoding UTF8
+    OK "Siparis tablolari otomatik incelendi; rapor kaydedildi."
+  }else{
+    Log "Siparis tablo inceleme cevap verdi fakat ok=false."
+  }
+}catch{
+  Log "Siparis tablo inceleme tamamlanamadi: $($_.Exception.Message)"
+}
+
 @"
 MUBEL B2B READ ONLY - HAZIR
 Tarih                  : $(Get-Date)
